@@ -41,12 +41,12 @@ export function toInlineHtml(children: unknown[], nodes: LexicalNode[]): string 
         if (isPlainText(child)) return escapeHtml(text)
         const n = nodes.push(child) - 1
         const tag = FORMAT_TAGS.find(([bit]) => Number(child.format) & bit)?.[1] ?? 'span'
-        // Inline code stays as is.
-        const no = Number(child.format) & 16 ? ' translate="no"' : ''
-        return `<${tag} data-n="${n}"${no}>${escapeHtml(text)}</${tag}>`
+        // No translate="no" anywhere: Supertext leaves stray «» quotes around such elements.
+        // Inline <code> comes back untranslated without it.
+        return `<${tag} data-n="${n}">${escapeHtml(text)}</${tag}>`
       }
       if (child.type === 'linebreak') return `<br data-n="${nodes.push(child) - 1}">`
-      if (child.type === 'tab') return `<span data-n="${nodes.push(child) - 1}" translate="no">\t</span>`
+      if (child.type === 'tab') return `<span data-n="${nodes.push(child) - 1}">\t</span>`
       const n = nodes.push(child) - 1
       if (Array.isArray(child.children)) {
         const url = typeof child.url === 'string' ? child.url : undefined
@@ -55,8 +55,8 @@ export function toInlineHtml(children: unknown[], nodes: LexicalNode[]): string 
         const tag = isLink ? 'a' : 'span'
         return `<${tag} data-n="${n}"${href}>${toInlineHtml(child.children, nodes)}</${tag}>`
       }
-      // Anything else inline is kept as is.
-      return `<span data-n="${n}" translate="no"></span>`
+      // Anything else inline is kept as is (the node is cloned back; its content here doesn't matter).
+      return `<span data-n="${n}"></span>`
     })
     .join('')
 }

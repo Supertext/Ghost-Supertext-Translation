@@ -54,7 +54,7 @@ describe('collect', () => {
     )
     expect(html).toContain('<div data-st-id="3">Why <i data-n="0">Swiss</i> teams</div>')
     // inline code is marked as not to translate
-    expect(html).toContain('One <code data-n="0" translate="no">x</code>')
+    expect(html).toContain('One <code data-n="0">x</code>')
     // card HTML goes as is, plain values are escaped
     expect(html).toContain('<div data-st-id="13"><p>Yes, very.</p><p>Second paragraph.</p></div>')
     expect(html).not.toContain('Raw HTML stays')

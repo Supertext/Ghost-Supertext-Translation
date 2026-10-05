@@ -1,7 +1,7 @@
 {
   "Translate your Ghost posts with Supertext": "Übersetzen Sie Ihre Ghost-Beiträge mit Supertext",
   "Add one tag, save, and get a translated draft that keeps your formatting.": "Ein Tag hinzufügen, speichern – und Sie erhalten einen übersetzten Entwurf, der Ihre Formatierung beibehält.",
-  "Supertext translates your posts and pages straight from Ghost Admin. Add a tag such as <code data-n=\"0\" translate=\"no\">#translate-de-ch</code>, save, and a few seconds later a <b data-n=\"1\">German draft</b> is waiting in your posts list.": "Supertext übersetzt Ihre Beiträge und Seiten direkt aus Ghost Admin. Fügen Sie ein Tag wie <code data-n=\"0\" translate=\"no\">#translate-de-ch</code> hinzu, speichern Sie, und wenige Sekunden später wartet ein <b data-n=\"1\">deutscher Entwurf</b> in Ihrer Beitragsliste.",
+  "Supertext translates your posts and pages straight from Ghost Admin. Add a tag such as <code data-n=\"0\">#translate-de-ch</code>, save, and a few seconds later a <b data-n=\"1\">German draft</b> is waiting in your posts list.": "Supertext übersetzt Ihre Beiträge und Seiten direkt aus Ghost Admin. Fügen Sie ein Tag wie <code data-n=\"0\">#translate-de-ch</code> hinzu, speichern Sie, und wenige Sekunden später wartet ein <b data-n=\"1\">deutscher Entwurf</b> in Ihrer Beitragsliste.",
   "How it works": "So funktioniert es",
   "Open a post and add a translate tag in the post settings.": "Öffnen Sie einen Beitrag und fügen Sie in den Beitragseinstellungen ein Übersetzungs-Tag hinzu.",
   "Save the post. Supertext translates the title, the excerpt and the whole body.": "Speichern Sie den Beitrag. Supertext übersetzt den Titel, den Auszug und den gesamten Text.",
