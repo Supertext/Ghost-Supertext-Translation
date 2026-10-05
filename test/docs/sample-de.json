@@ -1,0 +1,14 @@
+{
+  "Translate your Ghost posts with Supertext": "Übersetzen Sie Ihre Ghost-Beiträge mit Supertext",
+  "Add one tag, save, and get a translated draft that keeps your formatting.": "Ein Tag hinzufügen, speichern – und Sie erhalten einen übersetzten Entwurf, der Ihre Formatierung beibehält.",
+  "Supertext translates your posts and pages straight from Ghost Admin. Add a tag such as <code data-n=\"0\" translate=\"no\">#translate-de-ch</code>, save, and a few seconds later a <b data-n=\"1\">German draft</b> is waiting in your posts list.": "Supertext übersetzt Ihre Beiträge und Seiten direkt aus Ghost Admin. Fügen Sie ein Tag wie <code data-n=\"0\" translate=\"no\">#translate-de-ch</code> hinzu, speichern Sie, und wenige Sekunden später wartet ein <b data-n=\"1\">deutscher Entwurf</b> in Ihrer Beitragsliste.",
+  "How it works": "So funktioniert es",
+  "Open a post and add a translate tag in the post settings.": "Öffnen Sie einen Beitrag und fügen Sie in den Beitragseinstellungen ein Übersetzungs-Tag hinzu.",
+  "Save the post. Supertext translates the title, the excerpt and the whole body.": "Speichern Sie den Beitrag. Supertext übersetzt den Titel, den Auszug und den gesamten Text.",
+  "Review the draft, adjust what you like, and publish it.": "Prüfen Sie den Entwurf, passen Sie an, was Sie möchten, und veröffentlichen Sie ihn.",
+  "What stays the same": "Was gleich bleibt",
+  "Formatting, <a data-n=\"0\" href=\"https://www.supertext.com\">links</a>, images and cards are kept. Only the words change, so your layout looks <i data-n=\"1\">exactly</i> the same in every language.": "Formatierungen, <a data-n=\"0\" href=\"https://www.supertext.com\">Links</a>, Bilder und Karten bleiben erhalten. Nur die Wörter ändern sich, sodass Ihr Layout in jeder Sprache <i data-n=\"1\">genau</i> gleich aussieht.",
+  "Translations are created as drafts, so nothing goes live before someone has checked it.": "Übersetzungen werden als Entwürfe angelegt, damit nichts online geht, bevor es jemand geprüft hat.",
+  "Good translations read as if they had been written in that language.": "Gute Übersetzungen lesen sich, als wären sie in dieser Sprache geschrieben worden.",
+  "Learn more about Supertext": "Mehr über Supertext erfahren"
+}

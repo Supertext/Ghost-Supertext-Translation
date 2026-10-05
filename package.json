@@ -1,0 +1,37 @@
+{
+  "name": "ghost-supertext-translation",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Supertext AI translation for Ghost: tag a post, get a translated draft",
+  "license": "MIT",
+  "author": "Supertext AG",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Supertext/Ghost-Supertext-Translation.git"
+  },
+  "homepage": "https://github.com/Supertext/Ghost-Supertext-Translation#readme",
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "bin": {
+    "ghost-supertext-translation": "./dist/src/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/src/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "docs:screenshots": "node test/docs/screenshots.mjs"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "dependencies": {
+    "node-html-parser": "^7.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.3"
+  }
+}
