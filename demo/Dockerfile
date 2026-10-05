@@ -3,7 +3,8 @@
 FROM ghost:6 AS build
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.json tsconfig.build.json ./
-RUN npm ci --no-audit --no-fund
+# The Ghost image sets NODE_ENV=production; the build needs the dev dependencies (TypeScript).
+RUN npm ci --include=dev --no-audit --no-fund
 COPY src ./src
 RUN npm run build && npm prune --omit=dev
 
