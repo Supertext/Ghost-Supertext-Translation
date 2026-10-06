@@ -30,6 +30,8 @@ docker run -p 8080:8080 -v ghost-content:/var/lib/ghost/content \
   -e SUPERTEXT_API_KEY=... ghost-supertext
 ```
 
+No Supertext account yet? [Create one at supertext.com](https://www.supertext.com/person/en/account/signin). Generate your API key at [supertext.com → Integrations → API](https://www.supertext.com/en/integrations/api) (requires the Admin role).
+
 See the [installation guide](docs/INSTALLATION.md) for adding the connector to an existing Ghost site.
 
 ## License

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { loadConfig } from './config.js'
 import { createApp } from './server.js'
+import { API_KEY_URL, SIGNUP_URL } from './supertext/client.js'
 
 const config = loadConfig()
 const app = createApp(config)
@@ -12,7 +13,7 @@ app.server.listen(config.port, config.host, () => {
   )
   console.log(
     `[supertext] ${config.sourceLanguage} → ${config.languages.map((l) => l.code).join(', ') || '(no target languages)'}; ` +
-      `Supertext API ${config.supertextApiUrl}${config.supertextApiKey ? '' : ' (SUPERTEXT_API_KEY is not set: translations will fail)'}`,
+      `Supertext API ${config.supertextApiUrl}${config.supertextApiKey ? '' : ` (SUPERTEXT_API_KEY is not set: translations will fail. Create an account at ${SIGNUP_URL}, then generate a key at ${API_KEY_URL})`}`,
   )
 })
 

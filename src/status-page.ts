@@ -1,6 +1,7 @@
 import type { Job } from './jobs.js'
 import { type Language, RETRANSLATE_ALL_TAG, TRANSLATE_ALL_TAG } from './languages.js'
 import { escapeHtml as e } from './segments.js'
+import { API_KEY_URL, SIGNUP_URL } from './supertext/client.js'
 
 export type StatusPageData = {
   siteUrl: string
@@ -133,7 +134,7 @@ ${langRows}
   <h2>Connection</h2>
   <dl>
     <dt>Supertext API</dt><dd>${e(d.supertext.endpoint)}</dd>
-    <dt>API key</dt><dd>${d.supertext.keyConfigured ? '<span class="ok">Configured</span>' : '<span class="bad">Missing</span> — set SUPERTEXT_API_KEY'}</dd>
+    <dt>API key</dt><dd>${d.supertext.keyConfigured ? '<span class="ok">Configured</span>' : '<span class="bad">Missing</span> — set SUPERTEXT_API_KEY'}<br><span class="muted">No Supertext account yet? <a href="${SIGNUP_URL}" target="_blank" rel="noopener">Create one at supertext.com</a>. Generate your API key at <a href="${API_KEY_URL}" target="_blank" rel="noopener">supertext.com → Integrations → API</a> (requires the Admin role).</span></dd>
     <dt>Ghost</dt><dd>${d.ghost.ok ? `<span class="ok">Connected</span> ${e(d.ghost.detail)}` : `<span class="bad">Not connected</span> — ${e(d.ghost.detail)}`}</dd>
     <dt>Webhook signature</dt><dd>${d.webhookSecret ? '<span class="ok">Checked</span>' : '<span class="bad">Not checked</span> — set a webhook secret'}</dd>
     <dt>Signed in as</dt><dd>${e(d.viewer)}</dd>

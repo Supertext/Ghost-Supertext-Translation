@@ -4,7 +4,7 @@ import { collect } from './collect.js'
 import { type GhostAdmin, GhostError, type GhostPost, type Resource } from './ghost/admin.js'
 import { type Language, sourceCode } from './languages.js'
 import { applyTranslations, buildHtml, parseHtml } from './segments.js'
-import { type SupertextClient, SupertextError } from './supertext/client.js'
+import { API_KEY_URL, type SupertextClient, SupertextError } from './supertext/client.js'
 
 export type ResultStatus = 'created' | 'updated' | 'kept' | 'skipped' | 'failed'
 
@@ -115,7 +115,7 @@ export class Translator {
       }
     }
     if (!this.opts.supertext) {
-      return { message: 'No Supertext API key is configured (SUPERTEXT_API_KEY).', status: 'failed' }
+      return { message: `No Supertext API key is configured (SUPERTEXT_API_KEY). Generate one at ${API_KEY_URL} (requires the Admin role).`, status: 'failed' }
     }
 
     const existing = (

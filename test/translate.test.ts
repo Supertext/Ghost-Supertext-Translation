@@ -123,7 +123,8 @@ describe('Translator', () => {
   it('reports Supertext errors and missing content as failures', async () => {
     const { source, translator } = setup({ supertext: { failStatus: 401 } })
     expect(await translator.translate('posts', source.id, de, false)).toEqual({
-      message: 'Authentication failure. Please check your Supertext API key. — nope',
+      message:
+        'Authentication failure. Please check your Supertext API key. Generate one at https://www.supertext.com/en/integrations/api (requires the Admin role in your Supertext account). — nope',
       status: 'failed',
     })
     const old = setup()

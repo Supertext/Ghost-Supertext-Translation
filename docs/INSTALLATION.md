@@ -6,7 +6,7 @@ For administrators. The Supertext connector is a small Node.js service next to y
 
 - Ghost **6** (self-hosted or Ghost(Pro)). Posts must use Ghost's current (Lexical) editor, which is the default since Ghost 5.
 - Node.js **20.9** or newer for the connector (or Docker).
-- A Supertext account with an API key (see [API key](#api-key)).
+- A Supertext account with an API key ([create an account](https://www.supertext.com/person/en/account/signin); [generate the key](https://www.supertext.com/en/integrations/api) with the Admin role; see [API key](#api-key)).
 - The connector must be reachable by Ghost over the internet, or on your Ghost site's own host name (see [Choose a setup](#choose-a-setup)).
 - Ghost Administrator access, to create the integration.
 
@@ -77,9 +77,13 @@ The demo creates this integration automatically.
 
 ## API key
 
-Get your API key from your Supertext account (or ask Supertext). Set it as `SUPERTEXT_API_KEY`. You can paste it with or without the `Supertext-Auth-Key ` prefix Supertext shows; the connector sends it correctly either way. Never commit it to a repository.
+1. **No Supertext account yet?** [Log in or create a Supertext account](https://www.supertext.com/person/en/account/signin) with your email address.
+2. **Generate your API key** at [supertext.com → Integrations → API](https://www.supertext.com/en/integrations/api). This page requires the **Admin** role in your Supertext account; if you don't have it, ask an administrator of your Supertext account.
+3. Set the key as `SUPERTEXT_API_KEY`.
 
-Without a key the connector still starts, but every request fails with "No Supertext API key is configured".
+You can paste it with or without the `Supertext-Auth-Key ` prefix Supertext shows; the connector sends it correctly either way. Never commit it to a repository.
+
+Without a key the connector still starts, but every request fails with "No Supertext API key is configured", the startup log says `SUPERTEXT_API_KEY is not set`, and the status page shows the key as **Missing** together with the links above.
 
 ## Language setup
 
@@ -143,7 +147,7 @@ Ghost's **Publication language** (Settings → General) is one value for the who
 | `GHOST_WEBHOOK_SECRET` | — | Secret of the webhooks. When set, unsigned or wrongly signed webhooks are rejected. Strongly recommended. |
 | `GHOST_SETTINGS_FILE` | — | JSON file with `adminKey` and `webhookSecret`, used when the variables above are empty; re-read when it changes (the demo writes it). |
 | `GHOST_UPSTREAM` | — | Setup A: Ghost's internal address, e.g. `http://127.0.0.1:2368`. Enables the proxy and the status page. |
-| `SUPERTEXT_API_KEY` | — | Your Supertext API key. |
+| `SUPERTEXT_API_KEY` | — | Your Supertext API key, generated at [supertext.com → Integrations → API](https://www.supertext.com/en/integrations/api) (Admin role). |
 | `SUPERTEXT_API_URL` | `https://api.supertext.com/v1/` | Supertext API endpoint. |
 | `SOURCE_LANGUAGE` | `en` | Language of the originals. Sent to Supertext as the primary subtag (`en-GB` → `en`). |
 | `TARGET_LANGUAGES` | `de-CH,fr-CH` | Target languages, comma-separated. |
@@ -176,6 +180,6 @@ Translations stay normal Ghost posts. Each carries an invisible HTML comment in 
 | Connector log keeps saying `Waiting for Ghost` | The Admin API key is missing or wrong, or Ghost isn't reachable at `GHOST_UPSTREAM`/`GHOST_URL`. |
 | Status page sends you to the Ghost sign-in | You're not signed in to Ghost Admin in this browser, or the page isn't served under `/ghost/supertext/` on the site's own host. |
 | Status page: "only available when the connector runs in front of Ghost" | Setup B; use the connector log instead. |
-| "Authentication failure. Please check your Supertext API key." | Wrong or expired `SUPERTEXT_API_KEY`. |
+| "Authentication failure. Please check your Supertext API key." | Wrong or expired `SUPERTEXT_API_KEY`. Generate a new one at [supertext.com → Integrations → API](https://www.supertext.com/en/integrations/api) (Admin role). |
 | "Too many requests" | Supertext's per-second limit. The connector retries four times; translating fewer languages at once helps. |
 | "No content in Ghost's current editor format" | The post was written in Ghost's legacy editor; open and save it once to convert it. |

@@ -11,6 +11,12 @@
  * The file endpoint accepts up to 1,000,000 characters, so one document = one request.
  */
 
+/** Where administrators log in to or create a Supertext account. */
+export const SIGNUP_URL = 'https://www.supertext.com/person/en/account/signin'
+/** Where administrators generate the AI API key (supertext.com → Integrations → API, Admin role). */
+export const API_KEY_URL = 'https://www.supertext.com/en/integrations/api'
+const KEY_HELP = `Generate one at ${API_KEY_URL} (requires the Admin role in your Supertext account).`
+
 export const SUPERTEXT_ENVIRONMENTS = {
   live: 'https://api.supertext.com/v1/',
   staging: 'https://api.staging.supertext.com/v1/',
@@ -188,7 +194,7 @@ export class SupertextClient {
 
   private async request(method: string, path: string, body?: FormData): Promise<Response> {
     if (!this.apiKey) {
-      throw new SupertextError('missing_api_key', 'No Supertext API key is configured.')
+      throw new SupertextError('missing_api_key', `No Supertext API key is configured. ${KEY_HELP}`)
     }
     let res: Response
     for (let attempt = 0; ; attempt++) {
@@ -227,7 +233,7 @@ export function statusError(status: number, detail = ''): SupertextError {
     case 401:
     case 403:
       code = 'authentication_failure'
-      message = 'Authentication failure. Please check your Supertext API key.'
+      message = `Authentication failure. Please check your Supertext API key. ${KEY_HELP}`
       break
     case 404:
       code = 'not_found'
