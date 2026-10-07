@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-07
+
 ### Added
 
 - Connector service for Ghost 6: translation requested with internal tags (`#translate-<lang>`, `#translate-all`, `#retranslate-<lang>`, `#retranslate-all`), delivered by Ghost webhooks, written back as draft posts or pages tagged `#lang-<lang>`.
