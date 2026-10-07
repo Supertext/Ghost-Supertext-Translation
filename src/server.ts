@@ -6,6 +6,7 @@ import { parseWebhook, verifySignature } from './ghost/webhook.js'
 import { JobLog } from './jobs.js'
 import { languageLabel, managedTags, requestsFromTags } from './languages.js'
 import { renderStatusPage } from './status-page.js'
+import { VERSION } from './version.js'
 import { SupertextClient } from './supertext/client.js'
 import { Translator } from './translate.js'
 
@@ -150,6 +151,7 @@ export function createApp(config: Config, deps: { fetch?: typeof fetch; supertex
       sourceLabel: languageLabel(config.sourceLanguage),
       sourceLanguage: config.sourceLanguage,
       supertext: { endpoint: config.supertextApiUrl, keyConfigured: Boolean(supertext) },
+      version: VERSION,
       viewer: `${user.name} (${user.email})`,
       webhookSecret: Boolean(config.ghostSecrets().webhookSecret),
     })

@@ -2,6 +2,7 @@ import type { Job } from './jobs.js'
 import { type Language, RETRANSLATE_ALL_TAG, TRANSLATE_ALL_TAG } from './languages.js'
 import { escapeHtml as e } from './segments.js'
 import { API_KEY_URL, SIGNUP_URL } from './supertext/client.js'
+import { releaseUrl } from './version.js'
 
 export type StatusPageData = {
   siteUrl: string
@@ -14,6 +15,8 @@ export type StatusPageData = {
   languages: Language[]
   jobs: Job[]
   viewer: string
+  /** Connector version (package.json). */
+  version: string
 }
 
 const STATUS_LABEL: Record<Job['status'], string> = {
@@ -31,6 +34,11 @@ const editorUrl = (site: string, job: Job, id: string) =>
 const time = (iso: string) => {
   const d = new Date(iso)
   return `${d.toISOString().slice(0, 10)} ${d.toISOString().slice(11, 16)} UTC`
+}
+
+const versionHtml = (v: string) => {
+  const url = releaseUrl(v)
+  return url ? `<a href="${e(url)}" target="_blank" rel="noopener">${e(v)}</a>` : e(v)
 }
 
 const tag = (name: string) => `<code class="tag">${e(name)}</code>`
@@ -137,6 +145,7 @@ ${langRows}
     <dt>API key</dt><dd>${d.supertext.keyConfigured ? '<span class="ok">Configured</span>' : '<span class="bad">Missing</span> — set SUPERTEXT_API_KEY'}<br><span class="muted">No Supertext account yet? <a href="${SIGNUP_URL}" target="_blank" rel="noopener">Create one at supertext.com</a>. Generate your API key at <a href="${API_KEY_URL}" target="_blank" rel="noopener">supertext.com → Integrations → API</a> (requires the Admin role).</span></dd>
     <dt>Ghost</dt><dd>${d.ghost.ok ? `<span class="ok">Connected</span> ${e(d.ghost.detail)}` : `<span class="bad">Not connected</span> — ${e(d.ghost.detail)}`}</dd>
     <dt>Webhook signature</dt><dd>${d.webhookSecret ? '<span class="ok">Checked</span>' : '<span class="bad">Not checked</span> — set a webhook secret'}</dd>
+    <dt>Connector version</dt><dd>${versionHtml(d.version)}</dd>
     <dt>Signed in as</dt><dd>${e(d.viewer)}</dd>
   </dl>
 </section>

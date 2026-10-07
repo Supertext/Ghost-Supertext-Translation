@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- The status page shows the connector version (linked to its GitHub release), and the startup log names it. Ghost has no plugin list, so this is where administrators see which version runs.
+
 ## [0.1.0] - 2026-10-07
 
 ### Added

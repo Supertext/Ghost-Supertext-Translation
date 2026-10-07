@@ -22,6 +22,7 @@ src/
   languages.ts       target languages, tag names, mapping added tags to requests
   jobs.ts            recent requests for the status page (memory, optional JSON file)
   status-page.ts     status page HTML
+  version.ts         connector version, read once from package.json (status page, startup log)
   ghost/admin.ts     Admin API client (JWT from the integration key)
   ghost/webhook.ts   signature check and payload parsing
   supertext/client.ts Supertext AI file API v1 (shared with the other CMS plugins)
@@ -170,7 +171,7 @@ Releases are published by `.github/workflows/release.yml` when the version is of
 
 1. Move the *Unreleased* entries in `CHANGELOG.md` under a new `## [X.Y.Z] - YYYY-MM-DD` section, and keep an empty *Unreleased* above it.
 2. Set the same version in:
-   - `package.json`: the connector's version
+   - `package.json`: the connector's version (read at runtime by `src/version.ts`; the status page and startup log show it, so there is no second copy to update)
 3. Push to `main`. The workflow checks that the version files match `CHANGELOG.md`, then tags `vX.Y.Z` and creates the GitHub release with the CHANGELOG section as notes (0.x versions as pre-releases). A push that adds no new version does nothing, and a version that is already released is skipped. After fixing a failed run, start it again with *Run workflow* on the *Release* workflow.
 ## Known limitations / roadmap
 

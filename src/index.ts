@@ -2,13 +2,14 @@
 import { loadConfig } from './config.js'
 import { createApp } from './server.js'
 import { API_KEY_URL, SIGNUP_URL } from './supertext/client.js'
+import { VERSION } from './version.js'
 
 const config = loadConfig()
 const app = createApp(config)
 
 app.server.listen(config.port, config.host, () => {
   console.log(
-    `[supertext] Listening on ${config.host}:${config.port} for ${config.siteUrl}` +
+    `[supertext] Connector ${VERSION} listening on ${config.host}:${config.port} for ${config.siteUrl}` +
       (config.upstream ? ` (in front of Ghost at ${config.upstream})` : ''),
   )
   console.log(

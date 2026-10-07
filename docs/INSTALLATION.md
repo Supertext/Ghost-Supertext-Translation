@@ -106,7 +106,9 @@ plus `#translate-all` and `#retranslate-all`. You find them under **Tags → Int
 
 The status page shows the same configuration:
 
-![The languages and connection sections of the Supertext status page](images/status-settings.png)
+![The languages and connection sections of the Supertext status page, with the connector version](images/status-settings.png)
+
+Its **Connection** section also shows the **Connector version** (from the connector's `package.json`). Ghost has no plugin list, so this is where you check which version you run, for example before and after an update; a release version links to its release notes on GitHub. The startup log shows it too (`[supertext] Connector 0.1.0 listening on …`).
 
 ### Language sections on the site
 
