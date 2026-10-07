@@ -166,9 +166,12 @@ The script signs in as the editor, adds `#translate-de-ch`, captures the tag pic
 
 ## Releasing
 
-1. Move *Unreleased* in `CHANGELOG.md` to a version, bump `package.json`.
-2. Tag `vX.Y.Z` on `main` and create a GitHub release.
+Releases are published by `.github/workflows/release.yml` when the version is officially bumped; nobody tags or creates releases by hand.
 
+1. Move the *Unreleased* entries in `CHANGELOG.md` under a new `## [X.Y.Z] - YYYY-MM-DD` section, and keep an empty *Unreleased* above it.
+2. Set the same version in:
+   - `package.json`: the connector's version
+3. Push to `main`. The workflow checks that the version files match `CHANGELOG.md`, then tags `vX.Y.Z` and creates the GitHub release with the CHANGELOG section as notes (0.x versions as pre-releases). A push that adds no new version does nothing, and a version that is already released is skipped. After fixing a failed run, start it again with *Run workflow* on the *Release* workflow.
 ## Known limitations / roadmap
 
 - No status page in setup B (standalone); results only in the log.
