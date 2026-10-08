@@ -20,6 +20,8 @@ export type Config = {
   supertextApiUrl: string
   sourceLanguage: string
   languages: Language[]
+  /** `en`, `de`, `fr`, `it`, or `auto` (status page follows the browser's Accept-Language). */
+  uiLanguage: string
   settingsFile: string | null
   jobsFile: string | null
   /** Admin API key and webhook secret (env first, then the settings file). */
@@ -63,6 +65,7 @@ export function loadConfig(): Config {
     sourceLanguage: env('SOURCE_LANGUAGE', 'en'),
     supertextApiKey: env('SUPERTEXT_API_KEY'),
     supertextApiUrl: env('SUPERTEXT_API_URL', SUPERTEXT_ENVIRONMENTS.live),
+    uiLanguage: env('UI_LANGUAGE', 'auto').toLowerCase(),
     upstream,
   }
 }

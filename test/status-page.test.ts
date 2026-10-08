@@ -11,7 +11,7 @@ const data = (version: string): StatusPageData => ({
   languages: [],
   siteTitle: 'Demo',
   siteUrl: 'https://www.example.com',
-  sourceLabel: 'English',
+  locale: 'en',
   sourceLanguage: 'en',
   supertext: { endpoint: 'https://api.supertext.com/v1/', keyConfigured: true },
   version,

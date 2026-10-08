@@ -23,6 +23,10 @@ Everywhere an administrator enters or is told about the API key — the settings
 
 Wording: "No Supertext account yet? Create one at supertext.com. Generate your API key at supertext.com → Integrations → API (requires the Admin role)." In the UI, links open in a new tab (`target="_blank" rel="noopener"`); where the CMS shows plain text only, use the bare URLs. New screens or messages that mention the key get the links too.
 
+## UI languages (always)
+
+The plugin's own UI (buttons, panels, dialogs, settings, permissions, messages) is available in English, German, French and Italian through the CMS's own translation mechanism, so it follows the user's back-end language. New or changed strings get all four languages in the same commit. Formal address (Sie, vous, Lei), the CMS's own terms in each language, "Supertext", placeholders and URLs never translated.
+
 ## Plugin list (always)
 
 `README.md` ends with the shared list of all Supertext plugins (between the `<!-- supertext-plugins:start -->` and `<!-- supertext-plugins:end -->` markers). It is identical in every Supertext plugin repo: when a plugin is added, renamed or its description changes, update the list in **all** repos, not just this one.
@@ -79,6 +83,7 @@ Lessons from testing against the live API (October 2026), to apply in every plug
 - `npm test` (Vitest), `npm run typecheck`, `npm run build`. All three must pass before committing.
 - Never write to the source post: Ghost rejects an editor's next save after any other write ("Someone else is editing this post"). Feedback goes to the status page.
 - New settings go in `src/config.ts` **and** the settings table in `docs/INSTALLATION.md`.
+- UI strings (status page, job messages, error messages, tag descriptions) live in `src/i18n/{en,de,fr,it}.ts`; a new key goes into all four (the `Messages` type and `test/i18n.test.ts` enforce it). Job results store the message as keys (`localized`) plus the English `message` for logs.
 - Translated fields and cards live in `src/collect.ts`; keep the "Field rules" section of `docs/DEVELOPER.md` in sync. Tag names live in `src/languages.ts`; renaming them breaks existing sites (their editors use them, and `#lang-*` is used in `routes.yaml`).
 - `demo/` is the Railway demo (Dockerfile `demo/Dockerfile`, context = repo root): Ghost 6 + connector in one container, bootstrap in `demo/bootstrap.mjs`. Demo secrets live only in Railway variables.
 - Screenshots: `npm run docs:screenshots` against a fresh local demo container and `test/docs/stand-in.mjs` (see `docs/DEVELOPER.md` → Docs screenshots).

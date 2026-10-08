@@ -1,10 +1,11 @@
 import http, { type IncomingMessage, type ServerResponse } from 'node:http'
 
 import type { Config } from './config.js'
-import { GhostAdmin } from './ghost/admin.js'
+import { GhostAdmin, GhostError } from './ghost/admin.js'
 import { parseWebhook, verifySignature } from './ghost/webhook.js'
 import { JobLog } from './jobs.js'
-import { languageLabel, managedTags, requestsFromTags } from './languages.js'
+import { format, isUiLocale, pickLocale, t, type UiLocale } from './i18n/index.js'
+import { managedTags, requestsFromTags } from './languages.js'
 import { renderStatusPage } from './status-page.js'
 import { VERSION } from './version.js'
 import { SupertextClient } from './supertext/client.js'
@@ -47,7 +48,9 @@ export function createApp(config: Config, deps: { fetch?: typeof fetch; supertex
     const g = ghost()
     if (!g) throw new Error('No Ghost Admin API key yet')
     const existing = new Set((await g.listTags('visibility:internal')).map((t) => t.name.toLowerCase()))
-    for (const t of managedTags(config.languages, config.upstream ? `${config.siteUrl}${STATUS_PATH}` : undefined)) {
+    // Descriptions in UI_LANGUAGE if it names a language, else English. Existing tags are left as they are.
+    const tagLocale: UiLocale = isUiLocale(config.uiLanguage) ? config.uiLanguage : 'en'
+    for (const t of managedTags(config.languages, config.upstream ? `${config.siteUrl}${STATUS_PATH}` : undefined, tagLocale)) {
       if (existing.has(t.name.toLowerCase())) continue
       await g.addTag({ description: t.description, name: t.name })
       log(`Created tag ${t.name}`)
@@ -130,8 +133,9 @@ export function createApp(config: Config, deps: { fetch?: typeof fetch; supertex
       res.writeHead(302, { Location: `${config.siteUrl}/ghost/#/signin` })
       return void res.end()
     }
+    const locale = pickLocale(config.uiLanguage, header(req, 'accept-language'))
     const g = ghost()
-    let ghostState = { detail: 'No Ghost Admin API key is configured.', ok: false }
+    let ghostState = { detail: t(locale, 'page.noGhostKey'), ok: false }
     let siteTitle = new URL(config.siteUrl).host
     if (g) {
       try {
@@ -139,16 +143,16 @@ export function createApp(config: Config, deps: { fetch?: typeof fetch; supertex
         siteTitle = site.title ?? siteTitle
         ghostState = { detail: `(Ghost ${site.version ?? ''})`.replace(' )', ')'), ok: true }
       } catch (err) {
-        ghostState = { detail: err instanceof Error ? err.message : String(err), ok: false }
+        ghostState = { detail: err instanceof GhostError ? format(locale, err.localized) : err instanceof Error ? err.message : String(err), ok: false }
       }
     }
     const html = renderStatusPage({
       ghost: ghostState,
       jobs: jobs.list(),
       languages: config.languages,
+      locale,
       siteTitle,
       siteUrl: config.siteUrl,
-      sourceLabel: languageLabel(config.sourceLanguage),
       sourceLanguage: config.sourceLanguage,
       supertext: { endpoint: config.supertextApiUrl, keyConfigured: Boolean(supertext) },
       version: VERSION,
@@ -190,7 +194,7 @@ export function createApp(config: Config, deps: { fetch?: typeof fetch; supertex
         res.writeHead(302, { Location: STATUS_PATH })
         return void res.end()
       }
-      if (config.upstream) return proxy(req, res, config.upstream)
+      if (config.upstream) return proxy(req, res, config.upstream, config.uiLanguage)
       send(res, 404, 'Not found')
     }
     run().catch((err) => {
@@ -237,7 +241,7 @@ function readBody(req: IncomingMessage, limit = 5_000_000): Promise<string> {
 }
 
 /** Streams the request to Ghost and the answer back, unchanged. */
-function proxy(req: IncomingMessage, res: ServerResponse, upstream: string): void {
+function proxy(req: IncomingMessage, res: ServerResponse, upstream: string, uiLanguage: string): void {
   const target = new URL(upstream)
   const forwardedFor = [header(req, 'x-forwarded-for'), req.socket.remoteAddress].filter(Boolean).join(', ')
   const up = http.request(
@@ -256,7 +260,10 @@ function proxy(req: IncomingMessage, res: ServerResponse, upstream: string): voi
   up.on('error', () => {
     if (res.headersSent) return void res.end()
     res.writeHead(503, { 'Content-Type': 'text/html; charset=utf-8', 'Retry-After': '5' })
-    res.end('<!DOCTYPE html><meta http-equiv="refresh" content="5"><p style="font-family:sans-serif">Ghost is starting, one moment…</p>')
+    const locale = pickLocale(uiLanguage, header(req, 'accept-language'))
+    res.end(
+      `<!DOCTYPE html><html lang="${locale}"><meta charset="utf-8"><meta http-equiv="refresh" content="5"><p style="font-family:sans-serif">${t(locale, 'page.ghostStarting')}</p></html>`,
+    )
   })
   req.pipe(up)
 }

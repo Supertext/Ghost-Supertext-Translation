@@ -1,3 +1,4 @@
+import { format, languageLabel, type MessageKey, type Params, t, type UiLocale } from './i18n/index.js'
 import type { Job } from './jobs.js'
 import { type Language, RETRANSLATE_ALL_TAG, TRANSLATE_ALL_TAG } from './languages.js'
 import { escapeHtml as e } from './segments.js'
@@ -11,22 +12,15 @@ export type StatusPageData = {
   supertext: { endpoint: string; keyConfigured: boolean }
   webhookSecret: boolean
   sourceLanguage: string
-  sourceLabel: string
   languages: Language[]
   jobs: Job[]
   viewer: string
   /** Connector version (package.json). */
   version: string
+  /** Language of the page (UI_LANGUAGE or the browser's Accept-Language). */
+  locale: UiLocale
 }
 
-const STATUS_LABEL: Record<Job['status'], string> = {
-  created: 'Created',
-  failed: 'Failed',
-  kept: 'Not overwritten',
-  running: 'Translating…',
-  skipped: 'Skipped',
-  updated: 'Updated',
-}
 
 const editorUrl = (site: string, job: Job, id: string) =>
   `${site}/ghost/#/editor/${job.resource === 'posts' ? 'post' : 'page'}/${encodeURIComponent(id)}`
@@ -45,17 +39,19 @@ const tag = (name: string) => `<code class="tag">${e(name)}</code>`
 
 /** The staff-only page at /supertext/: how to translate, recent results, configuration. */
 export function renderStatusPage(d: StatusPageData): string {
+  const L = (key: MessageKey, params?: Params) => t(d.locale, key, params, e)
+  const jobMessage = (j: Job) => (j.localized?.length ? format(d.locale, j.localized, e) : e(j.message))
   const running = d.jobs.some((j) => j.status === 'running')
   const rows = d.jobs
     .map(
       (j) => `<tr>
   <td class="when">${e(time(j.at))}</td>
   <td><a href="${e(editorUrl(d.siteUrl, j, j.postId))}">${e(j.postTitle || j.postId)}</a></td>
-  <td>${e(j.languageLabel)}${j.force ? ' <span class="muted">(retranslate)</span>' : ''}</td>
-  <td><span class="badge ${j.status}">${STATUS_LABEL[j.status]}</span></td>
-  <td>${e(j.message)}${
+  <td>${e(languageLabel(j.language, d.locale))}${j.force ? ` <span class="muted">${L('page.retranslate')}</span>` : ''}</td>
+  <td><span class="badge ${j.status}">${L(`status.${j.status}`)}</span></td>
+  <td>${jobMessage(j)}${
     j.translationId && j.status !== 'failed'
-      ? ` <a class="open" href="${e(editorUrl(d.siteUrl, j, j.translationId))}">Open translation</a>`
+      ? ` <a class="open" href="${e(editorUrl(d.siteUrl, j, j.translationId))}">${L('page.openTranslation')}</a>`
       : ''
   }</td>
 </tr>`,
@@ -64,19 +60,19 @@ export function renderStatusPage(d: StatusPageData): string {
 
   const langRows = d.languages
     .map(
-      (l) => `<tr><td>${e(l.label)} <span class="muted">${e(l.code)}</span></td><td>${tag(l.translateTag)}</td><td>${tag(
+      (l) => `<tr><td>${e(languageLabel(l.code, d.locale))} <span class="muted">${e(l.code)}</span></td><td>${tag(l.translateTag)}</td><td>${tag(
         l.retranslateTag,
       )}</td><td>${tag(l.langTag)}</td></tr>`,
     )
     .join('\n')
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${d.locale}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 ${running ? '<meta http-equiv="refresh" content="4">' : ''}
-<title>Supertext Translation · ${e(d.siteTitle)}</title>
+<title>${L('page.title')} · ${e(d.siteTitle)}</title>
 <style>
 :root{--bg:#f4f5f6;--card:#fff;--text:#15171a;--muted:#7c8b9a;--line:#e6e9eb;--green:#30cf43;--accent:#14b886}
 @media (prefers-color-scheme:dark){:root{--bg:#151719;--card:#1c1f22;--text:#e8eaed;--muted:#8e9cac;--line:#2c3136}}
@@ -112,41 +108,41 @@ dt{color:var(--muted)}dd{margin:0}
 </head>
 <body>
 <header>
-  <h1>Supertext Translation <span class="site">· ${e(d.siteTitle)}</span></h1>
-  <a href="${e(d.siteUrl)}/ghost/">Back to Ghost Admin</a>
+  <h1>${L('page.title')} <span class="site">· ${e(d.siteTitle)}</span></h1>
+  <a href="${e(d.siteUrl)}/ghost/">${L('page.back')}</a>
 </header>
 <main>
 <section id="how">
-  <h2>How to translate</h2>
-  <p>Open a post or page in Ghost Admin, add one of these tags in the post settings, and save. A few seconds later a translated <strong>draft</strong> appears in your posts list, ready to review and publish.</p>
-  <p>${tag(TRANSLATE_ALL_TAG)} translates into every language below. ${tag(RETRANSLATE_ALL_TAG)} does the same and also replaces translations that were edited or published.</p>
+  <h2>${L('page.howTitle')}</h2>
+  <p>${L('page.howIntro')}</p>
+  <p>${t(d.locale, 'page.howAll', { retranslateAll: tag(RETRANSLATE_ALL_TAG), translateAll: tag(TRANSLATE_ALL_TAG) })}</p>
 </section>
 <section id="jobs">
-  <h2>Recent translations</h2>
+  <h2>${L('page.jobsTitle')}</h2>
   ${
     d.jobs.length
-      ? `<table class="jobs"><thead><tr><th>When</th><th>Source</th><th>Language</th><th>Result</th><th>Details</th></tr></thead><tbody>
+      ? `<table class="jobs"><thead><tr><th>${L('page.colWhen')}</th><th>${L('page.colSource')}</th><th>${L('page.colLanguage')}</th><th>${L('page.colResult')}</th><th>${L('page.colDetails')}</th></tr></thead><tbody>
 ${rows}
 </tbody></table>`
-      : '<p class="muted">No translations yet. Add a tag to a post to start.</p>'
+      : `<p class="muted">${L('page.noJobs')}</p>`
   }
 </section>
 <section id="languages">
-  <h2>Languages</h2>
-  <p>Source language: <strong>${e(d.sourceLabel)}</strong> <span class="muted">${e(d.sourceLanguage)}</span></p>
-  <table><thead><tr><th>Target language</th><th>Translate</th><th>Retranslate</th><th>Marks translations</th></tr></thead><tbody>
+  <h2>${L('page.languagesTitle')}</h2>
+  <p>${L('page.sourceLanguage')} <strong>${e(languageLabel(d.sourceLanguage, d.locale))}</strong> <span class="muted">${e(d.sourceLanguage)}</span></p>
+  <table><thead><tr><th>${L('page.colTarget')}</th><th>${L('page.colTranslate')}</th><th>${L('page.colRetranslate')}</th><th>${L('page.colMarks')}</th></tr></thead><tbody>
 ${langRows}
   </tbody></table>
 </section>
 <section id="settings">
-  <h2>Connection</h2>
+  <h2>${L('page.connectionTitle')}</h2>
   <dl>
-    <dt>Supertext API</dt><dd>${e(d.supertext.endpoint)}</dd>
-    <dt>API key</dt><dd>${d.supertext.keyConfigured ? '<span class="ok">Configured</span>' : '<span class="bad">Missing</span> — set SUPERTEXT_API_KEY'}<br><span class="muted">No Supertext account yet? <a href="${SIGNUP_URL}" target="_blank" rel="noopener">Create one at supertext.com</a>. Generate your API key at <a href="${API_KEY_URL}" target="_blank" rel="noopener">supertext.com → Integrations → API</a> (requires the Admin role).</span></dd>
-    <dt>Ghost</dt><dd>${d.ghost.ok ? `<span class="ok">Connected</span> ${e(d.ghost.detail)}` : `<span class="bad">Not connected</span> — ${e(d.ghost.detail)}`}</dd>
-    <dt>Webhook signature</dt><dd>${d.webhookSecret ? '<span class="ok">Checked</span>' : '<span class="bad">Not checked</span> — set a webhook secret'}</dd>
-    <dt>Connector version</dt><dd>${versionHtml(d.version)}</dd>
-    <dt>Signed in as</dt><dd>${e(d.viewer)}</dd>
+    <dt>${L('page.supertextApi')}</dt><dd>${e(d.supertext.endpoint)}</dd>
+    <dt>${L('page.apiKey')}</dt><dd>${d.supertext.keyConfigured ? `<span class="ok">${L('page.configured')}</span>` : `<span class="bad">${L('page.missing')}</span> ${L('page.missingKeyHint')}`}<br><span class="muted">${L('page.keyHelp', { apiKeyUrl: API_KEY_URL, signupUrl: SIGNUP_URL })}</span></dd>
+    <dt>${L('page.ghost')}</dt><dd>${d.ghost.ok ? `<span class="ok">${L('page.connected')}</span> ${e(d.ghost.detail)}` : `<span class="bad">${L('page.notConnected')}</span> — ${e(d.ghost.detail)}`}</dd>
+    <dt>${L('page.webhookSignature')}</dt><dd>${d.webhookSecret ? `<span class="ok">${L('page.checked')}</span>` : `<span class="bad">${L('page.notChecked')}</span> ${L('page.webhookHint')}`}</dd>
+    <dt>${L('page.version')}</dt><dd>${versionHtml(d.version)}</dd>
+    <dt>${L('page.signedInAs')}</dt><dd>${e(d.viewer)}</dd>
   </dl>
 </section>
 </main>

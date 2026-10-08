@@ -156,8 +156,15 @@ Ghost's **Publication language** (Settings → General) is one value for the who
 | `SUPERTEXT_POLITENESS` | `default` | Formal or informal address: `more` (formal, e.g. *Sie*/*vous*), `less` or `default`, for all languages, or per language: `de-CH=more,fr-CH=less`. |
 | `PORT` / `HOST` | `8080` / `0.0.0.0` | Where the connector listens. |
 | `JOBS_FILE` | — | JSON file to keep the status page's history across restarts. |
+| `UI_LANGUAGE` | `auto` | Language of the status page and of the tag descriptions: `en`, `de`, `fr`, `it`, or `auto` (see *Interface languages*). |
 
 Changing `TARGET_LANGUAGES` needs a restart. New tags are created on start; tags of removed languages are left in Ghost.
+
+## Interface languages
+
+The status page and its messages are available in English, German, French and Italian. Ghost Admin has no per-user interface language that the connector could read, so the page follows the browser's language (`Accept-Language`: a French browser gets French); other languages fall back to English. Set `UI_LANGUAGE=de` (or `en`, `fr`, `it`) to use one language for everyone.
+
+The descriptions of the internal tags in *Ghost Admin → Tags* are written in `UI_LANGUAGE` when it names a language, otherwise in English. They are set when the connector creates a tag; to change the language of existing tags, delete those tags in Ghost Admin and restart the connector (they are created again). The tag **names** (`#translate-de-ch` …) are never translated. The log is always English.
 
 ## Update
 
@@ -182,6 +189,6 @@ Translations stay normal Ghost posts. Each carries an invisible HTML comment in 
 | Connector log keeps saying `Waiting for Ghost` | The Admin API key is missing or wrong, or Ghost isn't reachable at `GHOST_UPSTREAM`/`GHOST_URL`. |
 | Status page sends you to the Ghost sign-in | You're not signed in to Ghost Admin in this browser, or the page isn't served under `/ghost/supertext/` on the site's own host. |
 | Status page: "only available when the connector runs in front of Ghost" | Setup B; use the connector log instead. |
-| "Authentication failure. Please check your Supertext API key." | Wrong or expired `SUPERTEXT_API_KEY`. Generate a new one at [supertext.com → Integrations → API](https://www.supertext.com/en/integrations/api) (Admin role). |
+| "Authentication failure. Please check your Supertext API key. …" | Wrong or expired `SUPERTEXT_API_KEY`. Generate a new one at [supertext.com → Integrations → API](https://www.supertext.com/en/integrations/api) (Admin role). |
 | "Too many requests" | Supertext's per-second limit. The connector retries four times; translating fewer languages at once helps. |
 | "No content in Ghost's current editor format" | The post was written in Ghost's legacy editor; open and save it once to convert it. |

@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
 import type { Resource } from './ghost/admin.js'
+import type { Localizable } from './i18n/index.js'
 import type { ResultStatus } from './translate.js'
 
 export type Job = {
@@ -14,10 +15,15 @@ export type Job = {
   languageLabel: string
   force: boolean
   status: ResultStatus | 'running'
+  /** English (logs; older job files only have this). */
   message: string
+  /** The message as catalog keys, shown in the reader's language on the status page. */
+  localized?: Localizable[]
   translationId?: string
   translationTitle?: string
 }
+
+const INTERRUPTED: Localizable = { key: 'job.interrupted' }
 
 /** The last translation requests, newest first, for the status page. Optionally kept in a JSON file. */
 export class JobLog {
@@ -33,7 +39,7 @@ export class JobLog {
       this.jobs = (JSON.parse(readFileSync(file, 'utf8')) as Job[]).slice(0, max)
       this.next = Math.max(0, ...this.jobs.map((j) => j.id)) + 1
       for (const j of this.jobs) {
-        if (j.status === 'running') Object.assign(j, { message: 'Interrupted by a restart. Remove the tag, save, and add it again.', status: 'failed' })
+        if (j.status === 'running') Object.assign(j, { localized: [INTERRUPTED], message: 'Interrupted by a restart. Remove the tag, save, and add it again.', status: 'failed' })
       }
     } catch {
       // first start or unreadable: start empty
@@ -48,14 +54,21 @@ export class JobLog {
     return this.jobs.some((j) => j.status === 'running' && j.postId === postId && j.language === language)
   }
 
-  start(job: Omit<Job, 'id' | 'at' | 'status' | 'message'>): Job {
-    const full: Job = { ...job, at: new Date().toISOString(), id: this.next++, message: 'Translating…', status: 'running' }
+  start(job: Omit<Job, 'id' | 'at' | 'status' | 'message' | 'localized'>): Job {
+    const full: Job = {
+      ...job,
+      at: new Date().toISOString(),
+      id: this.next++,
+      localized: [{ key: 'job.translating' }],
+      message: 'Translating…',
+      status: 'running',
+    }
     this.jobs = [full, ...this.jobs].slice(0, this.max)
     this.save()
     return full
   }
 
-  finish(job: Job, result: Pick<Job, 'status' | 'message' | 'translationId' | 'translationTitle'>): void {
+  finish(job: Job, result: Pick<Job, 'status' | 'message' | 'localized' | 'translationId' | 'translationTitle'>): void {
     Object.assign(job, result)
     this.save()
   }

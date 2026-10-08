@@ -66,6 +66,8 @@ If you change the original and want the translation to follow, remove the `#tran
 
 ## Messages on the status page
 
+The status page follows your browser's language (English, German, French or Italian), unless your administrator set one language for everyone; the tag names stay the same in every language.
+
 | Result | Meaning | What to do |
 | --- | --- | --- |
 | Created | A new draft was made. | Review and publish it. |

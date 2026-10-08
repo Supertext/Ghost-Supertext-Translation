@@ -4,14 +4,17 @@ import { collect } from './collect.js'
 import { type GhostAdmin, GhostError, type GhostPost, type Resource } from './ghost/admin.js'
 import { type Language, sourceCode } from './languages.js'
 import { applyTranslations, buildHtml, parseHtml } from './segments.js'
-import { API_KEY_URL, type SupertextClient, SupertextError } from './supertext/client.js'
+import { format, type Localizable } from './i18n/index.js'
+import { API_KEY_URL, SIGNUP_URL, type SupertextClient, SupertextError } from './supertext/client.js'
 
 export type ResultStatus = 'created' | 'updated' | 'kept' | 'skipped' | 'failed'
 
 export type TranslateResult = {
   status: ResultStatus
-  /** One sentence for editors (status page) and logs. */
+  /** One sentence for editors and logs, in English. */
   message: string
+  /** The same message as catalog keys, so the status page can show it in the reader's language. */
+  localized: Localizable[]
   translationId?: string
   translationTitle?: string
   /** Paths of segments that came back empty and kept the source text. */
@@ -82,6 +85,11 @@ export type TranslatorOptions = {
   log?: (message: string) => void
 }
 
+/** A result whose English `message` is built from its `localized` messages. */
+function result(status: ResultStatus, localized: Localizable[], extra: Partial<TranslateResult> = {}): TranslateResult {
+  return { ...extra, localized, message: format('en', localized), status }
+}
+
 export class Translator {
   constructor(private readonly opts: TranslatorOptions) {}
 
@@ -89,33 +97,28 @@ export class Translator {
     try {
       return await this.run(resource, id, language, force)
     } catch (err) {
-      const message =
+      const localized: Localizable[] =
         err instanceof SupertextError || err instanceof GhostError
-          ? err.message
-          : `Unexpected error: ${err instanceof Error ? err.message : String(err)}`
-      return { message, status: 'failed' }
+          ? err.localized
+          : [{ key: 'job.unexpected', params: { error: err instanceof Error ? err.message : String(err) } }]
+      return result('failed', localized)
     }
   }
 
   private async run(resource: Resource, id: string, language: Language, force: boolean): Promise<TranslateResult> {
     const { ghost } = this.opts
     const kind = resource === 'posts' ? 'post' : 'page'
+    const isPost = resource === 'posts'
     const source = await ghost.getPost(resource, id)
 
     if ((source.tags ?? []).some((t) => (t.slug ?? '').startsWith('hash-lang-')) || readMarker(source.codeinjection_head)) {
-      return {
-        message: `This ${kind} is itself a translation. Add the tag to the original ${kind} instead.`,
-        status: 'skipped',
-      }
+      return result('skipped', [{ key: isPost ? 'job.isTranslationPost' : 'job.isTranslationPage' }])
     }
     if (!source.lexical) {
-      return {
-        message: `This ${kind} has no content in Ghost's current editor format. Open it in Ghost Admin, make any small change, save, then add the tag again.`,
-        status: 'failed',
-      }
+      return result('failed', [{ key: isPost ? 'job.noLexicalPost' : 'job.noLexicalPage' }])
     }
     if (!this.opts.supertext) {
-      return { message: `No Supertext API key is configured (SUPERTEXT_API_KEY). Generate one at ${API_KEY_URL} (requires the Admin role).`, status: 'failed' }
+      return result('failed', [{ key: 'job.noApiKey', params: { apiKeyUrl: API_KEY_URL, signupUrl: SIGNUP_URL } }])
     }
 
     const existing = (
@@ -123,21 +126,16 @@ export class Translator {
     )[0]
     if (existing && !force) {
       const marker = readMarker(existing.codeinjection_head)
+      const kept = { translationId: existing.id, translationTitle: existing.title }
+      const params = { language: language.code, retranslateTag: language.retranslateTag }
       if (existing.status !== 'draft') {
-        return {
-          message: `The ${language.label} translation is ${existing.status}, so it was not overwritten. Add ${language.retranslateTag} to replace it anyway.`,
-          status: 'kept',
-          translationId: existing.id,
-          translationTitle: existing.title,
-        }
+        const state = String(existing.status)
+        const key =
+          state === 'published' ? 'job.keptPublished' : state === 'scheduled' ? 'job.keptScheduled' : state === 'sent' ? 'job.keptSent' : 'job.keptOther'
+        return result('kept', [{ key, params: { ...params, state } }], kept)
       }
       if (marker?.hash !== contentHash(existing)) {
-        return {
-          message: `The ${language.label} translation was edited after Supertext created it, so it was not overwritten. Add ${language.retranslateTag} to replace it anyway.`,
-          status: 'kept',
-          translationId: existing.id,
-          translationTitle: existing.title,
-        }
+        return result('kept', [{ key: 'job.keptEdited', params }], kept)
       }
     }
 
@@ -184,13 +182,14 @@ export class Translator {
       })
     }
 
-    const partly = missing.length ? ` ${missing.length} text part(s) came back empty and stayed in the source language.` : ''
-    return {
-      message: `${existing ? `Updated the ${language.label} translation` : `Created the ${language.label} draft`} "${saved.title}".${partly}`,
+    const messages: Localizable[] = [
+      { key: existing ? 'job.updated' : 'job.created', params: { language: language.code, title: saved.title } },
+    ]
+    if (missing.length) messages.push({ key: 'job.partly', params: { count: missing.length } })
+    return result(existing ? 'updated' : 'created', messages, {
       missing,
-      status: existing ? 'updated' : 'created',
       translationId: saved.id,
       translationTitle: saved.title,
-    }
+    })
   }
 }

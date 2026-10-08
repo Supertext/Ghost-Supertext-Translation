@@ -22,6 +22,7 @@ src/
   languages.ts       target languages, tag names, mapping added tags to requests
   jobs.ts            recent requests for the status page (memory, optional JSON file)
   status-page.ts     status page HTML
+  i18n/              UI strings: en.ts (source), de.ts, fr.ts, it.ts; t(), format(), pickLocale()
   version.ts         connector version, read once from package.json (status page, startup log)
   ghost/admin.ts     Admin API client (JWT from the integration key)
   ghost/webhook.ts   signature check and payload parsing
@@ -100,6 +101,7 @@ GHOST_URL=… GHOST_ADMIN_API_KEY=… npm start
 - `test/webhook.test.ts`: signatures, payload parsing, tag → request mapping, Admin API JWT.
 - `test/translate.test.ts`: the translator and the webhook server against `fakeGhost.ts` (mirrors Ghost's tag slugs, `~` filter and update-collision check) and `fakeSupertext.ts`: create, update in place, kept when edited/published, forced overwrite, one translation per language, skip translations, errors.
 - `test/client.test.ts`: Supertext client (shared).
+- `test/i18n.test.ts`: every catalog has the English keys with the same placeholders, tags and links; French non-breaking spaces; language choice; localized status page, errors and tag descriptions.
 
 The real Ghost round trip is covered by the demo container (below) and the screenshot script, which drive the actual UI.
 
@@ -173,6 +175,12 @@ Releases are published by `.github/workflows/release.yml` when the version is of
 2. Set the same version in:
    - `package.json`: the connector's version (read at runtime by `src/version.ts`; the status page and startup log show it, so there is no second copy to update)
 3. Push to `main`. The workflow checks that the version files match `CHANGELOG.md`, then tags `vX.Y.Z` and creates the GitHub release with the CHANGELOG section as notes (0.x versions as pre-releases). A push that adds no new version does nothing, and a version that is already released is skipped. After fixing a failed run, start it again with *Run workflow* on the *Release* workflow.
+## UI languages
+
+The status page, the job messages, Supertext and Ghost error messages and the tag descriptions come from `src/i18n/`: `en.ts` is the source, `de.ts`, `fr.ts` and `it.ts` are typed as `Messages`, so a missing or extra key fails `npm run typecheck`. New or changed strings need all four languages in the same commit (formal address; "Supertext", tag names, placeholders and URLs unchanged). `{name}` is a placeholder; `{language}` takes a language code and is shown as the language's name in the reader's language (`Intl.DisplayNames`). A parameter can itself be a message (`error.detail` wraps the error and the API's untranslated detail).
+
+Results don't store translated text: `TranslateResult.localized` / `Job.localized` hold keys and parameters (JSON-safe, kept in `JOBS_FILE`), and the status page formats them in the reader's language. `message` stays English for the log and for job files from older versions. `SupertextError` and `GhostError` carry `localized` the same way. `pickLocale(UI_LANGUAGE, Accept-Language)` chooses the page language.
+
 ## Known limitations / roadmap
 
 - No status page in setup B (standalone); results only in the log.

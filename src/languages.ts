@@ -1,3 +1,4 @@
+import { languageLabel, t, type UiLocale } from './i18n/index.js'
 import type { Politeness } from './supertext/client.js'
 
 /**
@@ -30,13 +31,7 @@ export const tagSlug = (name: string) => `hash-${name.replace(/^#/, '').toLowerC
 
 const languageSlug = (code: string) => code.trim().toLowerCase().replace(/_/g, '-')
 
-export function languageLabel(code: string): string {
-  try {
-    return new Intl.DisplayNames(['en'], { languageDisplay: 'standard', type: 'language' }).of(code.replace(/_/g, '-')) ?? code
-  } catch {
-    return code
-  }
-}
+export { languageLabel }
 
 /** `de-CH,fr-CH` → languages. Duplicates and blanks are dropped. */
 export function parseTargetLanguages(value: string, politeness: Record<string, Politeness> = {}): Language[] {
@@ -101,25 +96,23 @@ export function requestsFromTags(addedSlugs: Iterable<string>, languages: Langua
 
 /**
  * The internal tags the connector creates in Ghost, with the description shown in Ghost
- * Admin → Tags. `statusUrl` (the /supertext/ page, if served) is appended to request tags.
+ * Admin → Tags (in `locale`). `statusUrl` (the /supertext/ page, if served) is appended to
+ * request tags. Tag names are never translated: editors and `routes.yaml` use them.
  */
-export function managedTags(languages: Language[], statusUrl?: string): Array<{ name: string; description: string }> {
-  const results = statusUrl ? ` Results: ${statusUrl}` : ''
+export function managedTags(languages: Language[], statusUrl?: string, locale: UiLocale = 'en'): Array<{ name: string; description: string }> {
+  const results = statusUrl ? ` ${t(locale, 'tag.results', { url: statusUrl })}` : ''
   const tags = [
-    { description: `Supertext: add to a post and save to translate it into every configured language.${results}`, name: TRANSLATE_ALL_TAG },
-    {
-      description: `Supertext: like #translate-all, but also overwrites translations that were edited or published.${results}`,
-      name: RETRANSLATE_ALL_TAG,
-    },
+    { description: `${t(locale, 'tag.translateAll')}${results}`, name: TRANSLATE_ALL_TAG },
+    { description: `${t(locale, 'tag.retranslateAll')}${results}`, name: RETRANSLATE_ALL_TAG },
   ]
   for (const l of languages) {
     tags.push(
-      { description: `Supertext: add to a post and save to get a ${l.label} draft.${results}`, name: l.translateTag },
+      { description: `${t(locale, 'tag.translate', { language: l.code })}${results}`, name: l.translateTag },
       {
-        description: `Supertext: like ${l.translateTag}, but also overwrites an edited or published ${l.label} translation.${results}`,
+        description: `${t(locale, 'tag.retranslate', { language: l.code, translateTag: l.translateTag })}${results}`,
         name: l.retranslateTag,
       },
-      { description: `Marks a ${l.label} translation (set by Supertext).`, name: l.langTag },
+      { description: t(locale, 'tag.lang', { language: l.code }), name: l.langTag },
     )
   }
   return tags

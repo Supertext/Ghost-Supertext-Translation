@@ -11,11 +11,13 @@
  * The file endpoint accepts up to 1,000,000 characters, so one document = one request.
  */
 
+import { type Localizable, type Params, t, type UiLocale } from '../i18n/index.js'
+
 /** Where administrators log in to or create a Supertext account. */
 export const SIGNUP_URL = 'https://www.supertext.com/person/en/account/signin'
 /** Where administrators generate the AI API key (supertext.com → Integrations → API, Admin role). */
 export const API_KEY_URL = 'https://www.supertext.com/en/integrations/api'
-const KEY_HELP = `Generate one at ${API_KEY_URL} (requires the Admin role in your Supertext account).`
+const KEY_LINKS = { apiKeyUrl: API_KEY_URL, signupUrl: SIGNUP_URL }
 
 export const SUPERTEXT_ENVIRONMENTS = {
   live: 'https://api.supertext.com/v1/',
@@ -46,13 +48,36 @@ export type SupertextErrorCode =
 export class SupertextError extends Error {
   readonly code: SupertextErrorCode
   readonly status?: number
+  /** Placeholder values of the code's message (`error.<code>` in src/i18n). */
+  readonly params: Params
+  /** The API's own text, shown as sent (never translated). */
+  readonly detail: string
 
-  constructor(code: SupertextErrorCode, message: string, status?: number) {
-    super(message)
+  /** `message` is English; `localized` gives the same text in another UI language. */
+  constructor(code: SupertextErrorCode, opts: { status?: number; params?: Params; detail?: string } = {}) {
+    const params = opts.params ?? {}
+    const detail = opts.detail ?? ''
+    super(formatSupertextError('en', code, params, detail))
     this.name = 'SupertextError'
     this.code = code
-    this.status = status
+    this.status = opts.status
+    this.params = params
+    this.detail = detail
   }
+
+  get localized(): Localizable[] {
+    return [supertextErrorMessage(this.code, this.params, this.detail)]
+  }
+}
+
+function supertextErrorMessage(code: SupertextErrorCode, params: Params, detail = ''): Localizable {
+  const message: Localizable = { key: `error.${code}`, params }
+  return detail ? { key: 'error.detail', params: { detail, message } } : message
+}
+
+function formatSupertextError(locale: UiLocale, code: SupertextErrorCode, params: Params, detail = ''): string {
+  const m = supertextErrorMessage(code, params, detail)
+  return t(locale, m.key, m.params)
 }
 
 export type SupertextClientOptions = {
@@ -140,7 +165,7 @@ export class SupertextClient {
     const res = await this.request('POST', 'translate/ai/file', form)
     const data = (await res.json().catch(() => null)) as { file_id?: unknown } | null
     if (!data || typeof data.file_id !== 'string' || data.file_id === '') {
-      throw new SupertextError('no_file_id', 'Supertext did not return a file id.')
+      throw new SupertextError('no_file_id')
     }
     return data.file_id
   }
@@ -155,20 +180,14 @@ export class SupertextClient {
         case 'done':
           return
         case 'error':
-          throw new SupertextError('translation_error', 'Supertext failed to translate the document.')
+          throw new SupertextError('translation_error')
         case 'limit_exceeded':
-          throw new SupertextError(
-            'quota_exceeded',
-            'Your Supertext translation limit is exceeded. Please upgrade your subscription.',
-          )
+          throw new SupertextError('quota_exceeded')
         case 'deleted':
-          throw new SupertextError(
-            'file_deleted',
-            'The Supertext translation file was deleted before it could be downloaded.',
-          )
+          throw new SupertextError('file_deleted')
       }
       if (Date.now() + this.pollIntervalMs >= deadline) {
-        throw new SupertextError('timeout', 'Timed out waiting for the Supertext translation to finish.')
+        throw new SupertextError('timeout')
       }
       await this.sleep(this.pollIntervalMs)
     }
@@ -178,7 +197,7 @@ export class SupertextClient {
     const res = await this.request('GET', `translate/ai/file/${encodeURIComponent(fileId)}/translation`)
     const body = await res.text()
     if (body.trim() === '') {
-      throw new SupertextError('incomplete_response', 'The translated document was empty.')
+      throw new SupertextError('incomplete_response')
     }
     return body
   }
@@ -194,7 +213,7 @@ export class SupertextClient {
 
   private async request(method: string, path: string, body?: FormData): Promise<Response> {
     if (!this.apiKey) {
-      throw new SupertextError('missing_api_key', `No Supertext API key is configured. ${KEY_HELP}`)
+      throw new SupertextError('missing_api_key', { params: KEY_LINKS })
     }
     let res: Response
     for (let attempt = 0; ; attempt++) {
@@ -209,10 +228,9 @@ export class SupertextClient {
           signal: AbortSignal.timeout(this.requestTimeoutMs),
         })
       } catch (err) {
-        throw new SupertextError(
-          'transport_error',
-          `Could not reach Supertext: ${err instanceof Error ? err.message : String(err)}`,
-        )
+        throw new SupertextError('transport_error', {
+          params: { error: err instanceof Error ? err.message : String(err) },
+        })
       }
       if (res.status !== 429 || attempt >= RATE_LIMIT_RETRIES) break
       await res.body?.cancel().catch(() => undefined)
@@ -227,37 +245,19 @@ export class SupertextClient {
 }
 
 export function statusError(status: number, detail = ''): SupertextError {
-  let code: SupertextErrorCode
-  let message: string
-  switch (status) {
-    case 401:
-    case 403:
-      code = 'authentication_failure'
-      message = `Authentication failure. Please check your Supertext API key. ${KEY_HELP}`
-      break
-    case 404:
-      code = 'not_found'
-      message = 'The requested Supertext resource was not found.'
-      break
-    case 413:
-      code = 'payload_too_large'
-      message = 'The document is too large for Supertext to translate.'
-      break
-    case 429:
-      code = 'too_many_requests'
-      message = 'Too many requests to Supertext. Please try again shortly.'
-      break
-    case 500:
-    case 502:
-    case 503:
-      code = 'service_unavailable'
-      message = 'Supertext service unavailable.'
-      break
-    default:
-      code = 'unexpected_status'
-      message = `Supertext sent an unexpected status code ${status}.`
+  const codes: Record<number, SupertextErrorCode> = {
+    401: 'authentication_failure',
+    403: 'authentication_failure',
+    404: 'not_found',
+    413: 'payload_too_large',
+    429: 'too_many_requests',
+    500: 'service_unavailable',
+    502: 'service_unavailable',
+    503: 'service_unavailable',
   }
-  return new SupertextError(code, detail ? `${message} — ${detail}` : message, status)
+  const code = codes[status] ?? 'unexpected_status'
+  const params: Params = code === 'authentication_failure' ? KEY_LINKS : code === 'unexpected_status' ? { status } : {}
+  return new SupertextError(code, { detail, params, status })
 }
 
 /**

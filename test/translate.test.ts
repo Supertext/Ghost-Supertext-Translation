@@ -122,9 +122,9 @@ describe('Translator', () => {
 
   it('reports Supertext errors and missing content as failures', async () => {
     const { source, translator } = setup({ supertext: { failStatus: 401 } })
-    expect(await translator.translate('posts', source.id, de, false)).toEqual({
+    expect(await translator.translate('posts', source.id, de, false)).toMatchObject({
       message:
-        'Authentication failure. Please check your Supertext API key. Generate one at https://www.supertext.com/en/integrations/api (requires the Admin role in your Supertext account). — nope',
+        'Authentication failure. Please check your Supertext API key. No Supertext account yet? Create one at https://www.supertext.com/person/en/account/signin. Generate your API key at https://www.supertext.com/en/integrations/api (requires the Admin role). — nope',
       status: 'failed',
     })
     const old = setup()
@@ -157,6 +157,7 @@ describe('webhook server', () => {
       sourceLanguage: 'en',
       supertextApiKey: 'test-key',
       supertextApiUrl: 'https://api.test/v1/',
+      uiLanguage: 'auto',
       upstream: null,
       ...env,
     }

@@ -1,5 +1,7 @@
 import { createHmac } from 'node:crypto'
 
+import { type Localizable, t } from '../i18n/index.js'
+
 /**
  * Minimal Ghost Admin API client, authenticated with a custom integration's Admin API
  * key (`<id>:<secret>`) as a short-lived JWT, see
@@ -23,10 +25,13 @@ export type Resource = 'posts' | 'pages'
 
 export class GhostError extends Error {
   readonly status: number
-  constructor(message: string, status: number) {
-    super(message)
+  /** The message as a catalog key (src/i18n), so the status page can show it in its language. */
+  readonly localized: Localizable[]
+  constructor(message: Localizable, status: number) {
+    super(t('en', message.key, message.params))
     this.name = 'GhostError'
     this.status = status
+    this.localized = [message]
   }
 }
 
@@ -101,10 +106,13 @@ export class GhostAdmin {
     })
     const text = await res.text()
     if (!res.ok) {
-      let message = `Ghost answered HTTP ${res.status}`
+      let message: Localizable = { key: 'ghost.http', params: { status: res.status } }
       try {
         const err = (JSON.parse(text) as { errors?: Array<{ message?: string; context?: string }> }).errors?.[0]
-        if (err?.message) message = `${message}: ${err.message}${err.context ? ` (${err.context})` : ''}`
+        if (err?.message) {
+          const detail = `${err.message}${err.context ? ` (${err.context})` : ''}`
+          message = { key: 'ghost.httpDetail', params: { detail, status: res.status } }
+        }
       } catch {
         // not JSON
       }
@@ -119,7 +127,7 @@ export class GhostAdmin {
       include: 'tags,authors',
     })
     const post = data[resource]?.[0]
-    if (!post) throw new GhostError(`Ghost returned no ${resource.slice(0, -1)} ${id}`, 404)
+    if (!post) throw new GhostError({ key: resource === 'posts' ? 'ghost.noPost' : 'ghost.noPage', params: { id } }, 404)
     return post
   }
 

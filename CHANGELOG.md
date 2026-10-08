@@ -6,7 +6,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- French and Italian interface (and German where it was missing): the status page, its messages and the tag descriptions are available in English, German, French and Italian. The status page follows the browser's language; `UI_LANGUAGE` sets one language for everyone and for new tag descriptions.
 - The status page shows the connector version (linked to its GitHub release), and the startup log names it. Ghost has no plugin list, so this is where administrators see which version runs.
+
+### Changed
+
+- The "No Supertext API key" and "Authentication failure" messages now link to Supertext account signup as well as API key generation.
 
 ## [0.1.0] - 2026-10-07
 
