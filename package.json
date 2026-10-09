@@ -27,7 +27,7 @@
     "node": ">=20.9.0"
   },
   "dependencies": {
-    "node-html-parser": "^7.1.0"
+    "node-html-parser": "^9.0.4"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
