@@ -167,6 +167,12 @@ npm run docs:screenshots               # BASE_URL, RESOLVE_TO, DEMO_* variables 
 
 The script signs in as the editor, adds `#translate-de-ch`, captures the tag picker, posts list, status page, German draft, edits the draft and requests again (the *Not overwritten* warning), then signs in as admin for the integration (keys are masked), internal tags and status page settings. On the status page it shows the live API endpoint instead of the stand-in's address. Change the sample post → update `sample-de.json` (keys are the segments' inline HTML).
 
+## Dependency updates
+
+Dependabot (`.github/dependabot.yml`) opens weekly pull requests: minor and patch updates grouped into one, GitHub Actions in another, each major update on its own. Merge one when CI is green and it doesn't change what the plugin supports.
+
+Some major versions are ignored on purpose: TypeScript (7.x is the native compiler, which the type-checking and build tools here don't support yet) and `@types/node` (the types must match the oldest Node version the plugin supports, not the newest). Lift an ignore rule when the plugin moves to the new version.
+
 ## Releasing
 
 Releases are published by `.github/workflows/release.yml` when the version is officially bumped; nobody tags or creates releases by hand.
