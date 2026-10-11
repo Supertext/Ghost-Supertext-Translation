@@ -13,6 +13,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - The "No Supertext API key" and "Authentication failure" messages now link to Supertext account signup as well as API key generation.
 
+### Fixed
+
+- Target languages without a region (e.g. `de` in `TARGET_LANGUAGES`) are now sent to Supertext as `de-DE` (`fr` → `fr-FR`, `en` → `en-US`, …); Supertext rejected them with `INVALID_LANGUAGE_PAIR`. Regional codes are normalized (`de_ch` → `de-CH`). Tag names don't change.
+
 ## [0.1.0] - 2026-10-07
 
 ### Added

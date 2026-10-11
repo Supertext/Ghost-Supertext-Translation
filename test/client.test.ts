@@ -37,7 +37,7 @@ describe('SupertextClient', () => {
 
   it('omits optional fields when not needed', async () => {
     const fake = fakeSupertext()
-    await client(fake).translateHtml({ html: '<p data-st-id="0">x</p>', targetLang: 'en' })
+    await client(fake).translateHtml({ html: '<p data-st-id="0">x</p>', targetLang: 'en-US' })
     const form = fake.calls[0]?.form as FormData
     expect(form.has('source_lang')).toBe(false)
     expect(form.has('politeness')).toBe(false)
@@ -49,7 +49,7 @@ describe('SupertextClient', () => {
     ['deleted', 'file_deleted'],
   ])('maps status %s and still deletes the file', async (status, code) => {
     const fake = fakeSupertext({ statuses: [status] })
-    await expect(client(fake).translateHtml({ html: 'x', targetLang: 'en' })).rejects.toMatchObject({ code })
+    await expect(client(fake).translateHtml({ html: 'x', targetLang: 'en-US' })).rejects.toMatchObject({ code })
     expect(fake.calls.at(-1)?.method).toBe('DELETE')
   })
 
@@ -60,7 +60,7 @@ describe('SupertextClient', () => {
     Date.now = () => now
     try {
       const c = client(fake, { pollIntervalMs: 1000, sleep: async (ms) => void (now += ms), timeoutMs: 5000 })
-      await expect(c.translateHtml({ html: 'x', targetLang: 'en' })).rejects.toMatchObject({ code: 'timeout' })
+      await expect(c.translateHtml({ html: 'x', targetLang: 'en-US' })).rejects.toMatchObject({ code: 'timeout' })
     } finally {
       Date.now = realNow
     }
@@ -74,7 +74,7 @@ describe('SupertextClient', () => {
     [418, 'unexpected_status'],
   ])('maps HTTP %i', async (status, code) => {
     const fake = fakeSupertext({ failStatus: status })
-    const err = await client(fake).submitFile({ html: 'x', targetLang: 'en' }).catch((e) => e)
+    const err = await client(fake).submitFile({ html: 'x', targetLang: 'en-US' }).catch((e) => e)
     expect(err).toBeInstanceOf(SupertextError)
     expect(err).toMatchObject({ code, status })
   })

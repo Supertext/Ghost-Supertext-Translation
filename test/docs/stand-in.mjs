@@ -25,7 +25,11 @@ http
       for await (const chunk of req) chunks.push(chunk)
       const form = await new Request('http://x', { body: Buffer.concat(chunks), headers: req.headers, method: 'POST' }).formData()
       const id = randomBytes(6).toString('hex')
-      files.set(id, { html: await form.get('file').text(), target: String(form.get('target_lang')) })
+      const target = String(form.get('target_lang'))
+      const source = form.get('source_lang')
+      // Like the real API: bare targets (`de`) and regional sources (`de-CH`) are rejected.
+      if (!target.includes('-') || (typeof source === 'string' && source.includes('-'))) return send(400, { error_code: 'INVALID_LANGUAGE_PAIR' })
+      files.set(id, { html: await form.get('file').text(), target })
       return send(200, { file_id: id })
     }
     const match = path.match(/file\/([a-f0-9]+)(\/status|\/translation)?$/)

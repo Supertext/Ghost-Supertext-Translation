@@ -60,7 +60,7 @@ export function renderStatusPage(d: StatusPageData): string {
 
   const langRows = d.languages
     .map(
-      (l) => `<tr><td>${e(languageLabel(l.code, d.locale))} <span class="muted">${e(l.code)}</span></td><td>${tag(l.translateTag)}</td><td>${tag(
+      (l) => `<tr><td>${e(languageLabel(l.code, d.locale))} <span class="muted">${e(l.target)}</span></td><td>${tag(l.translateTag)}</td><td>${tag(
         l.retranslateTag,
       )}</td><td>${tag(l.langTag)}</td></tr>`,
     )

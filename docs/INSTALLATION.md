@@ -92,6 +92,11 @@ Ghost has no built-in multilingual content. The connector models languages the w
 - `SOURCE_LANGUAGE` is the language your editors write in (default `en`).
 - `TARGET_LANGUAGES` lists the languages to translate into, separated by commas, as Supertext language codes (`de-CH`, `fr-CH`, `it-CH`, `de`, `en-GB`, …).
 
+How the codes reach Supertext:
+
+- **Target languages** are always sent with a region, because Supertext rejects bare targets: a code with a region keeps it (`de-CH`; `fr_ch` → `fr-CH`); a bare one gets the usual default (`de` → `de-DE`, `fr` → `fr-FR`, `it` → `it-IT`, `en` → `en-US`, `pt` → `pt-PT`, `zh` → `zh-CN`, …). For another region, list the regional code (`de-AT`). The tags use the code as you wrote it (`de` → `#translate-de`). The status page shows the code each language is sent as.
+- **The source language** is sent without region (`en-GB` → `en`), because Supertext rejects regional source codes.
+
 For each target language the connector creates three internal tags on startup (`de-CH` shown):
 
 | Tag | Purpose |
@@ -151,8 +156,8 @@ Ghost's **Publication language** (Settings → General) is one value for the who
 | `GHOST_UPSTREAM` | — | Setup A: Ghost's internal address, e.g. `http://127.0.0.1:2368`. Enables the proxy and the status page. |
 | `SUPERTEXT_API_KEY` | — | Your Supertext API key, generated at [supertext.com → Integrations → API](https://www.supertext.com/en/integrations/api) (Admin role). |
 | `SUPERTEXT_API_URL` | `https://api.supertext.com/v1/` | Supertext API endpoint. |
-| `SOURCE_LANGUAGE` | `en` | Language of the originals. Sent to Supertext as the primary subtag (`en-GB` → `en`). |
-| `TARGET_LANGUAGES` | `de-CH,fr-CH` | Target languages, comma-separated. |
+| `SOURCE_LANGUAGE` | `en` | Language of the originals. Sent to Supertext without region (`en-GB` → `en`). |
+| `TARGET_LANGUAGES` | `de-CH,fr-CH` | Target languages, comma-separated. Bare codes are sent with a default region (`de` → `de-DE`). |
 | `SUPERTEXT_POLITENESS` | `default` | Formal or informal address: `more` (formal, e.g. *Sie*/*vous*), `less` or `default`, for all languages, or per language: `de-CH=more,fr-CH=less`. |
 | `PORT` / `HOST` | `8080` / `0.0.0.0` | Where the connector listens. |
 | `JOBS_FILE` | — | JSON file to keep the status page's history across restarts. |

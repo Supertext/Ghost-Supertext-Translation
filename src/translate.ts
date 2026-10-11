@@ -148,7 +148,7 @@ export class Translator {
       html,
       politeness: language.politeness,
       sourceLang: sourceCode(this.opts.sourceLanguage),
-      targetLang: language.code,
+      targetLang: language.target,
     })
     const missing = applyTranslations(collected.segments, parseHtml(translatedHtml))
 
