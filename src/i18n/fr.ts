@@ -87,6 +87,7 @@ export const fr: Messages = {
     'Aucune clé API Supertext n’est configurée. Pas encore de compte Supertext ? Créez-en un sur {signupUrl}. Générez votre clé API sur {apiKeyUrl} (rôle Admin requis).',
   'error.no_file_id': 'Supertext n’a pas renvoyé d’identifiant de fichier.',
   'error.not_found': 'La ressource Supertext demandée est introuvable.',
+  'error.invalid_language_pair': 'Supertext ne prend pas en charge cette paire de langues ({source} → {target}). Vérifiez les codes de langue.',
   'error.payload_too_large': 'Le document est trop volumineux pour être traduit par Supertext.',
   'error.quota_exceeded': 'Votre limite de traduction Supertext est dépassée. Veuillez passer à un abonnement supérieur.',
   'error.service_unavailable': 'Le service Supertext est indisponible.',

@@ -84,6 +84,7 @@ export const it: Messages = {
     'Nessuna chiave API Supertext configurata. Non ha ancora un account Supertext? Ne crei uno su {signupUrl}. Generi la Sua chiave API su {apiKeyUrl} (richiede il ruolo Admin).',
   'error.no_file_id': 'Supertext non ha restituito un ID file.',
   'error.not_found': 'La risorsa Supertext richiesta non è stata trovata.',
+  'error.invalid_language_pair': 'Supertext non supporta questa coppia di lingue ({source} → {target}). Verifichi i codici lingua.',
   'error.payload_too_large': 'Il documento è troppo grande per essere tradotto da Supertext.',
   'error.quota_exceeded': 'Il Suo limite di traduzione Supertext è stato superato. La preghiamo di aggiornare il Suo abbonamento.',
   'error.service_unavailable': 'Il servizio Supertext non è disponibile.',

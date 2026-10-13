@@ -88,6 +88,7 @@ Lessons from testing against the live API (October 2026), to apply in every plug
 
 - `npm test` (Vitest), `npm run typecheck`, `npm run build`. All three must pass before committing.
 - Never write to the source post: Ghost rejects an editor's next save after any other write ("Someone else is editing this post"). Feedback goes to the status page.
+- All Supertext API calls go through the Supertext SDK, whose TypeScript sources are copied into `src/vendor/supertext-sdk` and compiled with the connector; `src/supertext/client.ts` wraps it. Never edit `src/vendor/`: fix the SDK in `Supertext/Supertext-API-SDK-and-Guide` and run `scripts/vendor-sdk.sh`. Every SDK error code needs an `error.<code>` string in all four languages.
 - New settings go in `src/config.ts` **and** the settings table in `docs/INSTALLATION.md`.
 - UI strings (status page, job messages, error messages, tag descriptions) live in `src/i18n/{en,de,fr,it}.ts`; a new key goes into all four (the `Messages` type and `test/i18n.test.ts` enforce it). Job results store the message as keys (`localized`) plus the English `message` for logs.
 - Translated fields and cards live in `src/collect.ts`; keep the "Field rules" section of `docs/DEVELOPER.md` in sync. Tag names live in `src/languages.ts`; renaming them breaks existing sites (their editors use them, and `#lang-*` is used in `routes.yaml`).

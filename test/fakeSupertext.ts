@@ -16,7 +16,11 @@ export function fakeSupertext(opts: { statuses?: string[]; drop?: number[]; fail
   const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     const method = init?.method ?? 'GET'
-    const form = init?.body instanceof FormData ? init.body : undefined
+    // The SDK builds the multipart body itself; read it back as FormData.
+    const type = new Headers(init?.headers).get('content-type') ?? ''
+    const form = type.startsWith('multipart/form-data')
+      ? await new Response(init?.body as BodyInit, { headers: { 'content-type': type } }).formData()
+      : undefined
     calls.push({ form, method, url })
 
     const auth = new Headers(init?.headers).get('Authorization')
@@ -26,6 +30,8 @@ export function fakeSupertext(opts: { statuses?: string[]; drop?: number[]; fail
       rateLimited++
       return new Response('{"error_code":"RATE_LIMIT_EXCEEDED"}', { status: 429 })
     }
+
+    if (method === 'GET' && url.endsWith('/features')) return Response.json({})
 
     if (method === 'POST' && url.endsWith('translate/ai/file')) {
       const target = String(form?.get('target_lang') ?? '')

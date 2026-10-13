@@ -84,6 +84,7 @@ export const de: Messages = {
     'Es ist kein Supertext-API-Schlüssel eingerichtet. Noch kein Supertext-Konto? Erstellen Sie eines auf {signupUrl}. Erzeugen Sie Ihren API-Schlüssel unter {apiKeyUrl} (erfordert die Rolle Admin).',
   'error.no_file_id': 'Supertext hat keine Datei-ID zurückgegeben.',
   'error.not_found': 'Die angeforderte Supertext-Ressource wurde nicht gefunden.',
+  'error.invalid_language_pair': 'Supertext unterstützt dieses Sprachpaar nicht ({source} → {target}). Prüfen Sie die Sprachcodes.',
   'error.payload_too_large': 'Das Dokument ist zu groß, um von Supertext übersetzt zu werden.',
   'error.quota_exceeded': 'Ihr Supertext-Übersetzungslimit ist überschritten. Bitte erweitern Sie Ihr Abonnement.',
   'error.service_unavailable': 'Der Supertext-Dienst ist nicht verfügbar.',

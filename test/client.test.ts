@@ -74,7 +74,7 @@ describe('SupertextClient', () => {
     [418, 'unexpected_status'],
   ])('maps HTTP %i', async (status, code) => {
     const fake = fakeSupertext({ failStatus: status })
-    const err = await client(fake).submitFile({ html: 'x', targetLang: 'en-US' }).catch((e) => e)
+    const err = await client(fake).translateHtml({ html: 'x', targetLang: 'en-US' }).catch((e: unknown) => e)
     expect(err).toBeInstanceOf(SupertextError)
     expect(err).toMatchObject({ code, status })
   })
@@ -86,11 +86,25 @@ describe('SupertextClient', () => {
   })
 })
 
-describe('authHeader', () => {
+describe('API key', () => {
   it('accepts the key with or without the Supertext-Auth-Key prefix', async () => {
-    const { authHeader } = await import('../src/supertext/client.js')
-    expect(authHeader('abc+/=')).toBe('Supertext-Auth-Key abc+/=')
-    expect(authHeader(' Supertext-Auth-Key abc+/= ')).toBe('Supertext-Auth-Key abc+/=')
+    for (const apiKey of ['test-key', ' Supertext-Auth-Key test-key ']) {
+      const fake = fakeSupertext()
+      await client(fake, { apiKey }).validateApiKey()
+      expect(fake.calls.map((c) => `${c.method} ${c.url}`)).toEqual(['GET https://api.test/v1/features'])
+    }
+  })
+})
+
+describe('language pair', () => {
+  it('reports an unsupported pair with the codes as message parameters', async () => {
+    const fake = fakeSupertext({ failStatus: 400 })
+    const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      await fake.fetch(input, init)
+      return new Response('{"error_code":"INVALID_LANGUAGE_PAIR","source_lang":"en","target_lang":"xx-YY"}', { status: 400 })
+    }) as typeof globalThis.fetch
+    const err = await client(fake, { fetch }).translateHtml({ html: 'x', sourceLang: 'en', targetLang: 'xx-YY' }).catch((e: unknown) => e)
+    expect(err).toMatchObject({ code: 'invalid_language_pair', params: { source: 'en', target: 'xx-YY' } })
   })
 })
 
@@ -114,7 +128,7 @@ describe('rate limiting', () => {
   })
 
   it('honours Retry-After', async () => {
-    const { retryDelayMs } = await import('../src/supertext/client.js')
+    const { retryDelayMs } = await import('../src/vendor/supertext-sdk/index.js')
     expect(retryDelayMs(0, '3')).toBe(3000)
     expect(retryDelayMs(1, null)).toBeGreaterThanOrEqual(2000)
   })

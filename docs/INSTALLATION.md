@@ -195,5 +195,6 @@ Translations stay normal Ghost posts. Each carries an invisible HTML comment in 
 | Status page sends you to the Ghost sign-in | You're not signed in to Ghost Admin in this browser, or the page isn't served under `/ghost/supertext/` on the site's own host. |
 | Status page: "only available when the connector runs in front of Ghost" | Setup B; use the connector log instead. |
 | "Authentication failure. Please check your Supertext API key. …" | Wrong or expired `SUPERTEXT_API_KEY`. Generate a new one at [supertext.com → Integrations → API](https://www.supertext.com/en/integrations/api) (Admin role). |
+| "Supertext does not support this language pair (en → xx-YY)" | A code in `SOURCE_LANGUAGE` or `TARGET_LANGUAGES` is wrong or not offered by Supertext. Use language codes like `de-CH` or `fr`; the message shows the codes that were sent. |
 | "Too many requests" | Supertext's per-second limit. The connector retries four times; translating fewer languages at once helps. |
 | "No content in Ghost's current editor format" | The post was written in Ghost's legacy editor; open and save it once to convert it. |

@@ -91,6 +91,7 @@ export const en = {
     'No Supertext API key is configured. No Supertext account yet? Create one at {signupUrl}. Generate your API key at {apiKeyUrl} (requires the Admin role).',
   'error.no_file_id': 'Supertext did not return a file id.',
   'error.not_found': 'The requested Supertext resource was not found.',
+  'error.invalid_language_pair': 'Supertext does not support this language pair ({source} → {target}). Check the language codes.',
   'error.payload_too_large': 'The document is too large for Supertext to translate.',
   'error.quota_exceeded': 'Your Supertext translation limit is exceeded. Please upgrade your subscription.',
   'error.service_unavailable': 'Supertext service unavailable.',
