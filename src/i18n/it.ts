@@ -79,7 +79,8 @@ export const it: Messages = {
   'error.authentication_failure':
     'Autenticazione non riuscita. Verifichi la Sua chiave API Supertext. Non ha ancora un account Supertext? Ne crei uno su {signupUrl}. Generi la Sua chiave API su {apiKeyUrl} (richiede il ruolo Admin).',
   'error.file_deleted': 'Il file di traduzione Supertext è stato eliminato prima che potesse essere scaricato.',
-  'error.incomplete_response': 'Il documento tradotto era vuoto.',
+  'error.incomplete_response': 'Il documento tradotto è tornato vuoto o incompleto.',
+  'error.invalid_language_pair': 'Supertext non supporta la traduzione da {source} a {target}. Verifichi SOURCE_LANGUAGE e TARGET_LANGUAGES.',
   'error.missing_api_key':
     'Nessuna chiave API Supertext configurata. Non ha ancora un account Supertext? Ne crei uno su {signupUrl}. Generi la Sua chiave API su {apiKeyUrl} (richiede il ruolo Admin).',
   'error.no_file_id': 'Supertext non ha restituito un ID file.',

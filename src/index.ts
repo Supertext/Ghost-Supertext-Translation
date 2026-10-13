@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { loadConfig } from './config.js'
 import { createApp } from './server.js'
-import { API_KEY_URL, SIGNUP_URL } from './supertext/client.js'
+import { API_KEY_URL, SIGNUP_URL } from './supertext.js'
 import { VERSION } from './version.js'
 
 const config = loadConfig()

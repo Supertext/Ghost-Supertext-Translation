@@ -27,7 +27,8 @@
     "node": ">=20.9.0"
   },
   "dependencies": {
-    "node-html-parser": "^9.0.4"
+    "node-html-parser": "^9.0.4",
+    "supertext-sdk": "file:vendor/supertext-sdk"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

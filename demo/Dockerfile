@@ -3,6 +3,8 @@
 FROM ghost:6 AS build
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.json tsconfig.build.json ./
+# The Supertext SDK is a file: dependency (vendor/supertext-sdk) until it is on npm.
+COPY vendor ./vendor
 # The Ghost image sets NODE_ENV=production; the build needs the dev dependencies (TypeScript).
 RUN npm ci --include=dev --no-audit --no-fund
 COPY src ./src
@@ -34,6 +36,8 @@ ENV NODE_ENV=production \
 
 COPY --from=build /app/dist /opt/supertext/dist
 COPY --from=build /app/node_modules /opt/supertext/node_modules
+# node_modules/supertext-sdk links to ../vendor/supertext-sdk.
+COPY --from=build /app/vendor /opt/supertext/vendor
 COPY --from=build /app/package.json /opt/supertext/package.json
 COPY demo/bootstrap.mjs demo/sample-post.html demo/entrypoint.sh /opt/supertext/demo/
 RUN chmod +x /opt/supertext/demo/entrypoint.sh

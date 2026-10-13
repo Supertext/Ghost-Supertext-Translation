@@ -77,6 +77,8 @@ The user guide and installation guide of every plugin include screenshots of the
 
 AI file translation API v1, same as the WordPress plugin: POST HTML file → poll status → GET translation → DELETE. Details in `docs/DEVELOPER.md`. Never commit API keys; use the `SUPERTEXT_API_KEY` environment variable.
 
+The connector uses the [Supertext SDK](https://github.com/Supertext/Supertext-API-SDK-and-Guide) for all of this (`vendor/supertext-sdk`, updated by `scripts/vendor-sdk.sh`). Never edit the copy: protocol fixes go into the SDK repository (spec and all five SDKs), then re-vendor here.
+
 Lessons from testing against the live API (October 2026), to apply in every plugin:
 
 - **Auth header:** `Authorization: Supertext-Auth-Key <key>`. The header name must be `Authorization` (`Authentication` gets 403; no prefix gets 400). Supertext shows the key with the prefix, so strip a pasted `Supertext-Auth-Key ` and always send exactly one.
@@ -89,6 +91,7 @@ Lessons from testing against the live API (October 2026), to apply in every plug
 - `npm test` (Vitest), `npm run typecheck`, `npm run build`. All three must pass before committing.
 - Never write to the source post: Ghost rejects an editor's next save after any other write ("Someone else is editing this post"). Feedback goes to the status page.
 - New settings go in `src/config.ts` **and** the settings table in `docs/INSTALLATION.md`.
+- `src/supertext.ts` is the only place that creates the SDK client and maps its error codes to messages; a new SDK error code needs an `error.<code>` message in all four languages (the type check and `test/i18n.test.ts` enforce it).
 - UI strings (status page, job messages, error messages, tag descriptions) live in `src/i18n/{en,de,fr,it}.ts`; a new key goes into all four (the `Messages` type and `test/i18n.test.ts` enforce it). Job results store the message as keys (`localized`) plus the English `message` for logs.
 - Translated fields and cards live in `src/collect.ts`; keep the "Field rules" section of `docs/DEVELOPER.md` in sync. Tag names live in `src/languages.ts`; renaming them breaks existing sites (their editors use them, and `#lang-*` is used in `routes.yaml`).
 - `demo/` is the Railway demo (Dockerfile `demo/Dockerfile`, context = repo root): Ghost 6 + connector in one container, bootstrap in `demo/bootstrap.mjs`. Demo secrets live only in Railway variables.

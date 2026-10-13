@@ -18,7 +18,7 @@ src/
   translate.ts       one source × one language: find existing translation, overwrite rules, translate, save
   collect.ts         which fields, Lexical blocks and card properties are translated
   lexical.ts         Lexical inline nodes <-> inline HTML with data-n markers
-  segments.ts        segment model, HTML document for Supertext, parsing the answer
+  segments.ts        segment model; the document for Supertext via the SDK's HtmlDocument
   languages.ts       target languages, tag names, mapping added tags to requests
   jobs.ts            recent requests for the status page (memory, optional JSON file)
   status-page.ts     status page HTML
@@ -26,7 +26,8 @@ src/
   version.ts         connector version, read once from package.json (status page, startup log)
   ghost/admin.ts     Admin API client (JWT from the integration key)
   ghost/webhook.ts   signature check and payload parsing
-  supertext/client.ts Supertext AI file API v1 (shared with the other CMS plugins)
+  supertext.ts       the Supertext SDK client (User-Agent) and the messages for its error codes
+vendor/supertext-sdk/ the Supertext SDK (TypeScript), built from its repository (scripts/vendor-sdk.sh)
 demo/                 Railway demo image (Ghost 6 + connector) and its bootstrap
 test/                 Vitest suites, fakes of Ghost and Supertext; test/docs = screenshots
 ```
@@ -56,7 +57,7 @@ The hash covers title, excerpt and body (`contentHash`, canonical JSON). Editing
 
 ### HTML format
 
-One `<div data-st-id="N">` per segment (div, because card HTML such as toggle content contains `<p>`):
+One `<div data-st-id="N">` per segment (div, because card HTML such as toggle content contains `<p>`), built and read back by the SDK's `HtmlDocument` (every segment as `html: true`; plain fields are escaped first):
 
 ```html
 <div data-st-id="4">Hello <b data-n="0">bold world</b> and <a data-n="1" href="https://supertext.com">a link</a>.<br data-n="2">Line two.</div>
@@ -66,25 +67,36 @@ Text formats become `b`, `i`, `u`, `s`, `code`, `sub`, `sup`, `mark`; links `a h
 
 ## Supertext API protocol
 
-AI file translation API v1, same as the WordPress, TYPO3, Strapi and Payload plugins (`src/supertext/client.ts` is shared):
+AI file translation API v1, same as the other Supertext plugins:
 
 1. `POST translate/ai/file` multipart: `file` (`text/html`, exactly that content type), `target_lang` (regional, `de-CH`), `source_lang` (bare language, `en`; see *Language codes*), `politeness` (`less`/`more`, omitted for default) → `{ file_id }`
 2. `GET translate/ai/file/{id}/status` every 2 s until `done` (`error`, `limit_exceeded`, `deleted` fail), 3 min timeout
 3. `GET translate/ai/file/{id}/translation` → translated HTML
 4. `DELETE translate/ai/file/{id}` (best effort; files expire after 24 h)
 
-Header `Authorization: Supertext-Auth-Key <key>` (a pasted prefix is stripped). HTTP 429 is retried 4 times (`Retry-After`, else 1/2/4/8 s with jitter).
+Header `Authorization: Supertext-Auth-Key <key>` (a pasted prefix is stripped). HTTP 429 is retried 4 times (`Retry-After`, else 1/2/4/8 s with jitter, at most 30 s).
+
+### Supertext SDK
+
+The protocol is implemented by the [Supertext SDK](https://github.com/Supertext/Supertext-API-SDK-and-Guide) (`supertext-sdk`, TypeScript, no runtime dependencies): the auth header, the multipart upload, the 429 retries, polling with a timeout, deleting the file also after errors, language codes and `SupertextError` with stable codes: `missing_api_key`, `authentication_failure`, `invalid_language_pair`, `not_found`, `payload_too_large`, `too_many_requests`, `service_unavailable`, `unexpected_status`, `transport_error`, `no_file_id`, `translation_error`, `quota_exceeded`, `file_deleted`, `timeout`, `incomplete_response`. Protocol fixes go into the SDK repository, never into this copy.
+
+- `src/supertext.ts`: `createSupertextClient()` (User-Agent `supertext-sdk-typescript Ghost-Supertext-Translation/<version>`) and `localizeSupertextError()`, which turns an error code into the `error.<code>` message in four languages, with the API's own `detail` appended untranslated. `test/i18n.test.ts` checks every SDK error code has a message in every language.
+- The translator sends one `translateHtml()` per language. It doesn't use `translateTexts()`, because that fails the whole language when one segment is missing; here a missing segment keeps the source text and is reported.
+
+The SDK isn't on npm yet. `vendor/supertext-sdk/` holds the built package (commit in `vendor/supertext-sdk/COMMIT`), installed as the dependency `supertext-sdk@file:vendor/supertext-sdk`. Unlike the plugins that bundle it into one file, the connector is compiled with `tsc` and runs from this repository, so it is a runtime `dependencies` entry; nobody installs the SDK separately. `npm ci` links `node_modules/supertext-sdk` to the folder; `demo/Dockerfile` copies `vendor/` into both stages for that link.
+
+To update it: `scripts/vendor-sdk.sh <commit-or-branch>` (default `main`), then `npm install`, `npm test`, commit with a CHANGELOG entry. Never edit the copy. Once the SDK is on npm, depend on `supertext-sdk` from npm and delete `vendor/` and the script.
 
 ### Language codes
 
 Supertext's rule (from testing the live API): **source = bare language** (`en`, `de`), **target = regional code** (`de-DE`, `fr-CH`, `en-US`). A regional source or a bare target is rejected with `INVALID_LANGUAGE_PAIR`. Translating within one language (source `en`, target `en-GB`) is allowed.
 
-`src/languages.ts`:
+The SDK's `LanguageCodes` applies the rule (the same in every Supertext SDK and plugin):
 
-- `targetCode(code)` gives each `TARGET_LANGUAGES` entry its Supertext code (`Language.target`): normalized (`de_ch`/`de-ch` → `de-CH`; scripts and numeric regions keep their form: `zh-Hant`, `es-419`), and a bare language gets its default region from `DEFAULT_REGIONS`: ar→ar-SA, bg→bg-BG, cs→cs-CZ, da→da-DK, de→de-DE, el→el-GR, en→en-US, es→es-ES, et→et-EE, fi→fi-FI, fr→fr-FR, hr→hr-HR, hu→hu-HU, it→it-IT, ja→ja-JP, ko→ko-KR, lt→lt-LT, lv→lv-LV, nb→nb-NO, nl→nl-NL, pl→pl-PL, pt→pt-PT, ro→ro-RO, ru→ru-RU, sk→sk-SK, sl→sl-SI, sr→sr-RS, sv→sv-SE, th→th-TH, tr→tr-TR, uk→uk-UA, vi→vi-VN, zh→zh-CN (same table as the other Supertext plugins). Unknown bare codes are sent unchanged, so Supertext's error names them. The configured code itself (`Language.code`) still names the tags (`#translate-de`) and the translation marker, so existing sites keep working; the status page shows the code sent.
-- `sourceCode(code)`: the language of `SOURCE_LANGUAGE` (`en-GB` → `en`).
+- `LanguageCodes.target(code)` gives each `TARGET_LANGUAGES` entry its Supertext code (`Language.target`, set in `src/languages.ts`): normalized (`de_ch`/`de-ch` → `de-CH`; scripts and numeric regions keep their form: `zh-Hant`, `es-419`), and a bare language gets its default region from `LanguageCodes.DEFAULT_REGIONS`: ar→ar-SA, bg→bg-BG, cs→cs-CZ, da→da-DK, de→de-DE, el→el-GR, en→en-US, es→es-ES, et→et-EE, fi→fi-FI, fr→fr-FR, hr→hr-HR, hu→hu-HU, it→it-IT, ja→ja-JP, ko→ko-KR, lt→lt-LT, lv→lv-LV, nb→nb-NO, nl→nl-NL, pl→pl-PL, pt→pt-PT, ro→ro-RO, ru→ru-RU, sk→sk-SK, sl→sl-SI, sr→sr-RS, sv→sv-SE, th→th-TH, tr→tr-TR, uk→uk-UA, vi→vi-VN, zh→zh-CN (same table as the other Supertext plugins). Unknown bare codes are sent unchanged, so Supertext's error names them. The configured code itself (`Language.code`) still names the tags (`#translate-de`) and the translation marker, so existing sites keep working; the status page shows the code sent.
+- `LanguageCodes.source(code)`: the language of `SOURCE_LANGUAGE` (`en-GB` → `en`); the SDK applies it when sending, so the translator passes `SOURCE_LANGUAGE` as configured.
 
-The stand-ins (`test/fakeSupertext.ts`, `test/docs/stand-in.mjs`) reject bare targets and regional sources like the real API.
+The stand-ins (`test/fakeSupertext.ts`, `test/docs/stand-in.mjs`) reject bare targets and regional sources like the real API; `fakeSupertext.ts` also reads the multipart upload like a server and rejects a file part that isn't exactly `text/html` (HTTP 415).
 
 ## Ghost facts this relies on (checked on Ghost 6.67)
 
@@ -110,9 +122,10 @@ GHOST_URL=… GHOST_ADMIN_API_KEY=… npm start
 
 - `test/collect.test.ts`: segments and round trips on the Lexical of a real Ghost 6 post (`test/fixtures/probe-lexical.json`), formatting kept when words are reordered, lost segments.
 - `test/webhook.test.ts`: signatures, payload parsing, tag → request mapping, Admin API JWT.
-- `test/translate.test.ts`: the translator and the webhook server against `fakeGhost.ts` (mirrors Ghost's tag slugs, `~` filter and update-collision check) and `fakeSupertext.ts`: create, update in place, kept when edited/published, forced overwrite, one translation per language, skip translations, errors.
-- `test/client.test.ts`: Supertext client (shared).
-- `test/i18n.test.ts`: every catalog has the English keys with the same placeholders, tags and links; French non-breaking spaces; language choice; localized status page, errors and tag descriptions.
+- `test/translate.test.ts`: the translator and the webhook server against `fakeGhost.ts` (mirrors Ghost's tag slugs, `~` filter and update-collision check) and `fakeSupertext.ts`: create, update in place, kept when edited/published, forced overwrite, one translation per language, skip translations, errors, the SDK's User-Agent.
+- `test/languages.test.ts`: the language codes the connector relies on (`LanguageCodes`), tag names per language.
+- The Supertext client itself is tested in the SDK repository, against the shared test vectors (`spec/`).
+- `test/i18n.test.ts`: every catalog has the English keys with the same placeholders, tags and links; a message for every SDK error code; French non-breaking spaces; language choice; localized status page, errors and tag descriptions.
 
 The real Ghost round trip is covered by the demo container (below) and the screenshot script, which drive the actual UI.
 

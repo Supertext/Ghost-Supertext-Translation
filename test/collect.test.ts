@@ -63,7 +63,7 @@ describe('collect', () => {
 
   it('writes translations back into fields, Lexical nodes and cards', () => {
     const c = collect(post())
-    const translated = parseHtml(shout(buildHtml(c.segments)))
+    const translated = parseHtml(shout(buildHtml(c.segments)), c.segments)
     expect(applyTranslations(c.segments, translated)).toEqual([])
 
     expect(c.fields.title).toBe('  WHY SWISS TEAMS ')
@@ -97,8 +97,8 @@ describe('collect', () => {
   it('keeps formatting on the right words when the translator reorders them', () => {
     const c = collect(post())
     const seg = 4 // the paragraph
-    const translated = parseHtml(buildHtml(c.segments))
-    translated.set(seg, '<a data-n="1" href="https://supertext.com">Ein Link</a> und <b data-n="0">fette Welt</b>, hallo.<br data-n="2">Zeile zwei.')
+    const translated = parseHtml(buildHtml(c.segments), c.segments)
+    translated[seg] = '<a data-n="1" href="https://supertext.com">Ein Link</a> und <b data-n="0">fette Welt</b>, hallo.<br data-n="2">Zeile zwei.'
     applyTranslations(c.segments, translated)
     const p = (c.lexical!.root as any).children[1]
     expect(p.children.map((n: any) => n.type)).toEqual(['link', 'extended-text', 'extended-text', 'extended-text', 'linebreak', 'extended-text'])
@@ -108,9 +108,9 @@ describe('collect', () => {
 
   it('keeps the source text for segments the response lost', () => {
     const c = collect(post())
-    const translated = parseHtml(shout(buildHtml(c.segments)))
-    translated.delete(4)
-    translated.set(0, '   ')
+    const translated = parseHtml(shout(buildHtml(c.segments)), c.segments)
+    translated[4] = null
+    translated[0] = '   '
     expect(applyTranslations(c.segments, translated)).toEqual(['title', 'lexical.1.paragraph'])
     expect(c.fields.title).toBe('  Why Swiss teams ')
     expect((c.lexical!.root as any).children[1].children[1].text).toBe('bold world')

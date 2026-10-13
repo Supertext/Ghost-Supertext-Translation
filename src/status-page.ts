@@ -2,7 +2,7 @@ import { format, languageLabel, type MessageKey, type Params, t, type UiLocale }
 import type { Job } from './jobs.js'
 import { type Language, RETRANSLATE_ALL_TAG, TRANSLATE_ALL_TAG } from './languages.js'
 import { escapeHtml as e } from './segments.js'
-import { API_KEY_URL, SIGNUP_URL } from './supertext/client.js'
+import { API_KEY_URL, SIGNUP_URL } from './supertext.js'
 import { releaseUrl } from './version.js'
 
 export type StatusPageData = {

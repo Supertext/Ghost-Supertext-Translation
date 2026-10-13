@@ -1,5 +1,12 @@
+import { LanguageCodes } from 'supertext-sdk'
 import { describe, expect, it } from 'vitest'
-import { parseTargetLanguages, sourceCode, targetCode } from '../src/languages.js'
+
+import { parseTargetLanguages } from '../src/languages.js'
+
+// The rules live in the Supertext SDK (LanguageCodes, tested there against the shared
+// vectors); these cases pin what the connector relies on.
+const sourceCode = (code: string) => LanguageCodes.source(code)
+const targetCode = (code: string) => LanguageCodes.target(code)
 
 describe('language codes', () => {
   it('sends a bare source language', () => {

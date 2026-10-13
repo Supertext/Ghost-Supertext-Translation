@@ -86,7 +86,8 @@ export const en = {
   'error.authentication_failure':
     'Authentication failure. Please check your Supertext API key. No Supertext account yet? Create one at {signupUrl}. Generate your API key at {apiKeyUrl} (requires the Admin role).',
   'error.file_deleted': 'The Supertext translation file was deleted before it could be downloaded.',
-  'error.incomplete_response': 'The translated document was empty.',
+  'error.incomplete_response': 'The translated document came back empty or incomplete.',
+  'error.invalid_language_pair': 'Supertext does not support translating from {source} into {target}. Please check SOURCE_LANGUAGE and TARGET_LANGUAGES.',
   'error.missing_api_key':
     'No Supertext API key is configured. No Supertext account yet? Create one at {signupUrl}. Generate your API key at {apiKeyUrl} (requires the Admin role).',
   'error.no_file_id': 'Supertext did not return a file id.',

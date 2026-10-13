@@ -1,4 +1,5 @@
 import { parse } from 'node-html-parser'
+import { HtmlDocument } from 'supertext-sdk'
 
 /**
  * One translatable unit: a post field, a Lexical paragraph (heading, list item...), or
@@ -14,8 +15,6 @@ export type Segment = {
   /** Where the text lives, for logs and error messages, e.g. `lexical.3` or `title`. */
   path: string
 }
-
-export const SEGMENT_ATTR = 'data-st-id'
 
 export const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -57,32 +56,28 @@ export function htmlSegment(value: unknown, path: string, set: (v: string) => vo
   }
 }
 
-/** Renders segments as one HTML document, one `<div data-st-id>` per segment. */
+/**
+ * The HTML document for Supertext, one `<div data-st-id>` per segment (the SDK's
+ * `HtmlDocument`). Every segment is inline HTML: plain fields are escaped first.
+ */
 export function buildHtml(segments: Segment[]): string {
-  const parts = segments.map((seg, i) => `<div ${SEGMENT_ATTR}="${i}">${seg.html}</div>\n`)
-  return `<!DOCTYPE html>\n<html><head><meta charset="utf-8"></head><body>\n${parts.join('')}</body></html>`
+  return HtmlDocument.build(segments.map((seg) => ({ html: true, text: seg.html })))
 }
 
-/** Extracts the translated inner HTML per segment index from the returned document. */
-export function parseHtml(html: string): Map<number, string> {
-  const root = parse(html)
-  const out = new Map<number, string>()
-  for (const el of root.querySelectorAll(`[${SEGMENT_ATTR}]`)) {
-    const id = Number(el.getAttribute(SEGMENT_ATTR))
-    if (Number.isInteger(id) && !out.has(id)) out.set(id, el.innerHTML)
-  }
-  return out
+/** The translated inner HTML per segment, in order; `null` where the answer lost one. */
+export function parseHtml(html: string, segments: Segment[]): (string | null)[] {
+  return HtmlDocument.parse(html, segments.map(() => ({ html: true })))
 }
 
 /**
  * Writes translations into the segments. Segments the response lost (or that could not
  * be rebuilt) keep their source text; their paths are returned so the caller can report them.
  */
-export function applyTranslations(segments: Segment[], translated: Map<number, string>): string[] {
+export function applyTranslations(segments: Segment[], translated: (string | null)[]): string[] {
   const missing: string[] = []
   segments.forEach((seg, i) => {
-    const value = translated.get(i)
-    if (value === undefined || !seg.apply(value)) missing.push(seg.path)
+    const value = translated[i]
+    if (value === null || value === undefined || !seg.apply(value)) missing.push(seg.path)
   })
   return missing
 }
