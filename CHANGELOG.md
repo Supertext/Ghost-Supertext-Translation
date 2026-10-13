@@ -12,7 +12,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Changed
 
 - All Supertext API calls now go through the official Supertext SDK, bundled with the connector (nothing extra to install). Behaviour stays the same.
-- An unsupported language pair now has its own message ("Supertext does not support this language pair (en → xx-YY)") in all four interface languages.
+- An unsupported language pair now has its own message ("Supertext does not support this language pair (en → xx-YY)") in all four interface languages. An unknown language (e.g. `xx-YY`) is now reported as an unsupported language pair too, not as "resource not found" (Supertext answers it with HTTP 404).
 - The "No Supertext API key" and "Authentication failure" messages now link to Supertext account signup as well as API key generation.
 
 ### Fixed
