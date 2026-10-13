@@ -18,6 +18,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Fixed
 
 - Target languages without a region (e.g. `de` in `TARGET_LANGUAGES`) are now sent to Supertext as `de-DE` (`fr` → `fr-FR`, `en` → `en-US`, …); Supertext rejected them with `INVALID_LANGUAGE_PAIR`. Regional codes are normalized (`de_ch` → `de-CH`). Tag names don't change.
+- Language codes with a variant, such as `de_DE_formal` or `en-US-x-twain`, are sent to Supertext as `de-DE` and `en-US` (bundled SDK updated to commit `aba02dd`).
 
 ## [0.1.0] - 2026-10-07
 
