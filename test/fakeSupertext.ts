@@ -1,6 +1,6 @@
 import { parse } from 'node-html-parser'
 
-export type Call = { method: string; url: string; form?: FormData }
+export type Call = { method: string; url: string; form?: FormData; userAgent?: string | null }
 
 /**
  * In-memory stand-in for the Supertext AI file API. "Translates" by prefixing every
@@ -16,8 +16,15 @@ export function fakeSupertext(opts: { statuses?: string[]; drop?: number[]; fail
   const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     const method = init?.method ?? 'GET'
-    const form = init?.body instanceof FormData ? init.body : undefined
-    calls.push({ form, method, url })
+    // The SDK sends a hand-built multipart body (the file part must be exactly
+    // `text/html`); read it the way a server would.
+    let form: FormData | undefined
+    if (method === 'POST' && init?.body !== undefined) {
+      form = await new Request(url, { body: init.body as BodyInit, headers: init.headers, method }).formData()
+      const fileType = (form.get('file') as Blob | null)?.type
+      if (fileType !== 'text/html') return new Response('unsupported media type', { status: 415 })
+    }
+    calls.push({ form, method, url, userAgent: new Headers(init?.headers).get('User-Agent') })
 
     const auth = new Headers(init?.headers).get('Authorization')
     if (auth !== 'Supertext-Auth-Key test-key') return new Response('bad key', { status: 401 })

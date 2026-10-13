@@ -1,5 +1,7 @@
+import { LanguageCodes } from 'supertext-sdk'
+
 import { languageLabel, t, type UiLocale } from './i18n/index.js'
-import type { Politeness } from './supertext/client.js'
+import type { Politeness } from './supertext.js'
 
 /**
  * A target language and the Ghost internal tags that belong to it.
@@ -10,7 +12,7 @@ import type { Politeness } from './supertext/client.js'
 export type Language = {
   /** Code as configured, e.g. `de-CH` or `de`. Used in markers, logs and messages. */
   code: string
-  /** Code sent to Supertext as target: always regional (`de` → `de-DE`), see `targetCode`. */
+  /** Code sent to Supertext as target: always regional (`de` → `de-DE`), `LanguageCodes.target`. */
   target: string
   /** Lower-case code used in tag names and URLs, e.g. `de-ch`. */
   slug: string
@@ -47,7 +49,7 @@ export function parseTargetLanguages(value: string, politeness: Record<string, P
     seen.add(slug)
     out.push({
       code,
-      target: targetCode(code),
+      target: LanguageCodes.target(code),
       label: languageLabel(code),
       langTag: `#lang-${slug}`,
       politeness: politeness[slug] ?? politeness['*'] ?? 'default',
@@ -69,49 +71,6 @@ export function parsePoliteness(value: string | undefined): Record<string, Polit
     if (p === 'default' || p === 'less' || p === 'more') out[a === '*' ? '*' : languageSlug(a ?? '')] = p
   }
   return out
-}
-
-/**
- * Regional default for a bare target language. Supertext rejects bare targets
- * (`de`) with INVALID_LANGUAGE_PAIR, so `de` is sent as `de-DE`. Same table in
- * every Supertext plugin.
- */
-export const DEFAULT_REGIONS: Readonly<Record<string, string>> = {
-  ar: 'ar-SA', bg: 'bg-BG', cs: 'cs-CZ', da: 'da-DK', de: 'de-DE', el: 'el-GR', en: 'en-US',
-  es: 'es-ES', et: 'et-EE', fi: 'fi-FI', fr: 'fr-FR', hr: 'hr-HR', hu: 'hu-HU', it: 'it-IT',
-  ja: 'ja-JP', ko: 'ko-KR', lt: 'lt-LT', lv: 'lv-LV', nb: 'nb-NO', nl: 'nl-NL', pl: 'pl-PL',
-  pt: 'pt-PT', ro: 'ro-RO', ru: 'ru-RU', sk: 'sk-SK', sl: 'sl-SI', sr: 'sr-RS', sv: 'sv-SE',
-  th: 'th-TH', tr: 'tr-TR', uk: 'uk-UA', vi: 'vi-VN', zh: 'zh-CN',
-}
-
-/** `de_ch` / `DE-ch` → `de-CH`; scripts and numeric regions keep their form (`zh-Hant`, `es-419`). */
-export function normalizeTag(code: string): string {
-  const [language, ...rest] = code.trim().split(/[-_]+/).filter(Boolean)
-  if (!language) return ''
-  const subtags = rest.map((part) => {
-    if (/^[a-z]{2}$/i.test(part)) return part.toUpperCase()
-    if (/^[a-z]{4}$/i.test(part)) return part[0]!.toUpperCase() + part.slice(1).toLowerCase()
-    return part
-  })
-  return [language.toLowerCase(), ...subtags].join('-')
-}
-
-/**
- * Supertext target code: always regional. A code with a region is normalized
- * (`fr_ch` → `fr-CH`), a bare language gets its default region (`de` → `de-DE`);
- * unknown bare codes are sent unchanged.
- */
-export function targetCode(code: string): string {
-  const tag = normalizeTag(code)
-  return tag.includes('-') ? tag : (DEFAULT_REGIONS[tag] ?? tag)
-}
-
-/**
- * Supertext expects the source as a bare language (`en`, not `en-GB`); a regional
- * source code is rejected with INVALID_LANGUAGE_PAIR.
- */
-export function sourceCode(code: string): string {
-  return normalizeTag(code).split('-')[0] ?? ''
 }
 
 export type Request = { language: Language; force: boolean }

@@ -8,7 +8,7 @@ import { format, isUiLocale, pickLocale, t, type UiLocale } from './i18n/index.j
 import { managedTags, requestsFromTags } from './languages.js'
 import { renderStatusPage } from './status-page.js'
 import { VERSION } from './version.js'
-import { SupertextClient } from './supertext/client.js'
+import { createSupertextClient } from './supertext.js'
 import { Translator } from './translate.js'
 
 const log = (msg: string) => console.log(`[supertext] ${msg}`)
@@ -36,7 +36,7 @@ export function createApp(config: Config, deps: { fetch?: typeof fetch; supertex
     return new GhostAdmin({ adminKey, apiUrl, fetch: deps.fetch, siteUrl: config.siteUrl })
   }
   const supertext = config.supertextApiKey
-    ? new SupertextClient({
+    ? createSupertextClient({
         apiKey: config.supertextApiKey,
         baseUrl: config.supertextApiUrl,
         fetch: deps.fetch,

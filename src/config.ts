@@ -1,7 +1,7 @@
 import { readFileSync, statSync } from 'node:fs'
 
 import { type Language, parsePoliteness, parseTargetLanguages } from './languages.js'
-import { SUPERTEXT_ENVIRONMENTS } from './supertext/client.js'
+import { LIVE_BASE_URL } from './supertext.js'
 
 /**
  * All settings come from environment variables (see docs/INSTALLATION.md → All settings).
@@ -64,7 +64,7 @@ export function loadConfig(): Config {
     siteUrl,
     sourceLanguage: env('SOURCE_LANGUAGE', 'en'),
     supertextApiKey: env('SUPERTEXT_API_KEY'),
-    supertextApiUrl: env('SUPERTEXT_API_URL', SUPERTEXT_ENVIRONMENTS.live),
+    supertextApiUrl: env('SUPERTEXT_API_URL', LIVE_BASE_URL),
     uiLanguage: env('UI_LANGUAGE', 'auto').toLowerCase(),
     upstream,
   }

@@ -7,3 +7,4 @@ coverage/
 *.log
 .DS_Store
 test/docs/node_modules/
+!/vendor/supertext-sdk/dist/

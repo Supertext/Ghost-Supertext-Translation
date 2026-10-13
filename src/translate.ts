@@ -1,11 +1,13 @@
 import { createHash } from 'node:crypto'
 
+import { LanguageCodes } from 'supertext-sdk'
+
 import { collect } from './collect.js'
 import { type GhostAdmin, GhostError, type GhostPost, type Resource } from './ghost/admin.js'
-import { type Language, sourceCode } from './languages.js'
+import { type Language } from './languages.js'
 import { applyTranslations, buildHtml, parseHtml } from './segments.js'
 import { format, type Localizable } from './i18n/index.js'
-import { API_KEY_URL, SIGNUP_URL, type SupertextClient, SupertextError } from './supertext/client.js'
+import { API_KEY_URL, localizeSupertextError, SIGNUP_URL, type SupertextClient, SupertextError } from './supertext.js'
 
 export type ResultStatus = 'created' | 'updated' | 'kept' | 'skipped' | 'failed'
 
@@ -98,9 +100,11 @@ export class Translator {
       return await this.run(resource, id, language, force)
     } catch (err) {
       const localized: Localizable[] =
-        err instanceof SupertextError || err instanceof GhostError
-          ? err.localized
-          : [{ key: 'job.unexpected', params: { error: err instanceof Error ? err.message : String(err) } }]
+        err instanceof SupertextError
+          ? localizeSupertextError(err, { source: LanguageCodes.source(this.opts.sourceLanguage), target: language.target })
+          : err instanceof GhostError
+            ? err.localized
+            : [{ key: 'job.unexpected', params: { error: err instanceof Error ? err.message : String(err) } }]
       return result('failed', localized)
     }
   }
@@ -144,13 +148,12 @@ export class Translator {
     this.opts.log?.(
       `Translating ${kind} ${source.id} "${source.title}" into ${language.code}: ${collected.segments.length} segments, ${html.length} characters`,
     )
-    const translatedHtml = await this.opts.supertext.translateHtml({
-      html,
+    // The SDK sends the source as a bare language (`en-GB` → `en`) and the target regional.
+    const translatedHtml = await this.opts.supertext.translateHtml(html, language.target, {
       politeness: language.politeness,
-      sourceLang: sourceCode(this.opts.sourceLanguage),
-      targetLang: language.target,
+      sourceLang: this.opts.sourceLanguage,
     })
-    const missing = applyTranslations(collected.segments, parseHtml(translatedHtml))
+    const missing = applyTranslations(collected.segments, parseHtml(translatedHtml, collected.segments))
 
     const lexical = collected.lexical ? JSON.stringify(collected.lexical) : source.lexical
     const fields: Record<string, unknown> = { ...collected.fields, lexical }

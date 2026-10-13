@@ -11,6 +11,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 
+- The Supertext API is now used through the [Supertext SDK](https://github.com/Supertext/Supertext-API-SDK-and-Guide) (`supertext-sdk`), the same client and language-code rules as the other Supertext plugins: auth header, upload, HTTP 429 retries, polling, deleting the file, language codes and error codes. Behaviour for editors is unchanged. Until the SDK is on npm, a built copy ships in `vendor/supertext-sdk` (updated by `scripts/vendor-sdk.sh`); nothing extra to install. Supertext sees the connector and its version in the User-Agent.
+- New message when Supertext rejects a language pair ("Supertext does not support translating from … into …"), in all four interface languages; before, it showed as an unexpected HTTP 400. "The translated document was empty" now reads "… came back empty or incomplete".
 - The "No Supertext API key" and "Authentication failure" messages now link to Supertext account signup as well as API key generation.
 
 ### Fixed

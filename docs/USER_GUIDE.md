@@ -77,5 +77,6 @@ The status page follows your browser's language (English, German, French or Ital
 | Failed: "… no content in Ghost's current editor format" | The post was written in Ghost's old editor. | Open it, make any small change, save, then add the tag again. |
 | Failed: "Authentication failure …" or "No Supertext API key …" | The site's Supertext settings are wrong. | Tell your administrator. They can generate a key at supertext.com → Integrations → API (see the [installation guide](INSTALLATION.md#api-key)). |
 | Failed: "… translation limit is exceeded" | Your Supertext subscription is used up. | Tell your administrator. |
+| Failed: "Supertext does not support translating from … into …" | One of the site's language settings is a code Supertext doesn't know. | Tell your administrator. |
 | Failed: "Interrupted by a restart" | The server restarted while translating. | Remove the tag, then add it again. |
 | "… text part(s) came back empty" | A few pieces stayed in the original language. | Translate those pieces by hand in the draft. |

@@ -7,7 +7,7 @@ import type { Config } from '../src/config.js'
 import { GhostAdmin } from '../src/ghost/admin.js'
 import { parseTargetLanguages } from '../src/languages.js'
 import { createApp } from '../src/server.js'
-import { SupertextClient } from '../src/supertext/client.js'
+import { createSupertextClient } from '../src/supertext.js'
 import { contentHash, readMarker, Translator } from '../src/translate.js'
 import { ADMIN_KEY, fakeGhost, lexicalOf } from './fakeGhost.js'
 import { fakeSupertext } from './fakeSupertext.js'
@@ -22,7 +22,7 @@ function setup(opts: { normalizeLexical?: boolean; supertext?: Parameters<typeof
   const translator = new Translator({
     ghost: new GhostAdmin({ adminKey: ADMIN_KEY, apiUrl: 'https://ghost.test', fetch: fetchImpl }),
     sourceLanguage: 'en',
-    supertext: new SupertextClient({ apiKey: 'test-key', baseUrl: 'https://api.test/v1', fetch: fetchImpl, sleep: async () => {} }),
+    supertext: createSupertextClient({ apiKey: 'test-key', baseUrl: 'https://api.test/v1', fetch: fetchImpl, sleep: async () => {} }),
   })
   const source = ghost.add('posts', {
     authors: [{ email: 'eve@example.com', id: 'u2' }],
@@ -62,6 +62,8 @@ describe('Translator', () => {
     // the request went out with a primary-subtag source and the regional target
     const form = st.calls[0]!.form!
     expect([form.get('source_lang'), form.get('target_lang')]).toEqual(['en', 'de-CH'])
+    // through the Supertext SDK, which names the connector in the User-Agent
+    expect(st.calls[0]!.userAgent).toMatch(/^supertext-sdk-typescript Ghost-Supertext-Translation\/\d+\.\d+\.\d+$/)
     // the source post was never written
     expect(ghost.posts.get(source.id)!.updated_at).toBe(source.updated_at)
   })

@@ -79,7 +79,8 @@ export const de: Messages = {
   'error.authentication_failure':
     'Authentifizierung fehlgeschlagen. Bitte prüfen Sie Ihren Supertext-API-Schlüssel. Noch kein Supertext-Konto? Erstellen Sie eines auf {signupUrl}. Erzeugen Sie Ihren API-Schlüssel unter {apiKeyUrl} (erfordert die Rolle Admin).',
   'error.file_deleted': 'Die Supertext-Übersetzungsdatei wurde gelöscht, bevor sie heruntergeladen werden konnte.',
-  'error.incomplete_response': 'Das übersetzte Dokument war leer.',
+  'error.incomplete_response': 'Das übersetzte Dokument war leer oder unvollständig.',
+  'error.invalid_language_pair': 'Supertext unterstützt die Übersetzung von {source} nach {target} nicht. Bitte prüfen Sie SOURCE_LANGUAGE und TARGET_LANGUAGES.',
   'error.missing_api_key':
     'Es ist kein Supertext-API-Schlüssel eingerichtet. Noch kein Supertext-Konto? Erstellen Sie eines auf {signupUrl}. Erzeugen Sie Ihren API-Schlüssel unter {apiKeyUrl} (erfordert die Rolle Admin).',
   'error.no_file_id': 'Supertext hat keine Datei-ID zurückgegeben.',

@@ -1,8 +1,10 @@
+import { ErrorCode, errorForStatus, SupertextError } from 'supertext-sdk'
 import { describe, expect, it } from 'vitest'
+
 import { CATALOGS, format, pickLocale, t, UI_LOCALES } from '../src/i18n/index.js'
 import { managedTags, parseTargetLanguages } from '../src/languages.js'
 import { renderStatusPage, type StatusPageData } from '../src/status-page.js'
-import { statusError, SupertextError } from '../src/supertext/client.js'
+import { API_KEY_URL, localizeSupertextError, SIGNUP_URL } from '../src/supertext.js'
 
 const placeholders = (s: string) => [...s.matchAll(/\{\w+\}|<[^>]+>|https?:\/\/\S+/g)].map((m) => m[0]).sort()
 
@@ -50,10 +52,30 @@ describe('localized messages', () => {
   })
 
   it('translates Supertext errors, keeping the API detail as sent', () => {
-    const err = statusError(500, 'upstream down')
+    const err = errorForStatus(500, 'upstream down')
     expect(err).toBeInstanceOf(SupertextError)
-    expect(err.message).toBe('Supertext service unavailable. — upstream down')
-    expect(format('de', err.localized)).toBe('Der Supertext-Dienst ist nicht verfügbar. — upstream down')
+    expect(format('en', localizeSupertextError(err))).toBe('Supertext service unavailable. — upstream down')
+    expect(format('de', localizeSupertextError(err))).toBe('Der Supertext-Dienst ist nicht verfügbar. — upstream down')
+  })
+
+  it('has a message for every Supertext SDK error code, in every language', () => {
+    for (const code of Object.values(ErrorCode)) {
+      for (const locale of UI_LOCALES) {
+        expect(Object.keys(CATALOGS[locale]), `${locale}: error.${code}`).toContain(`error.${code}`)
+      }
+    }
+  })
+
+  it('fills in the language codes, the key links and the network reason', () => {
+    const pair = errorForStatus(400, '{"error_code":"INVALID_LANGUAGE_PAIR"}')
+    expect(format('en', localizeSupertextError(pair, { source: 'en', target: 'xx' }))).toBe(
+      'Supertext does not support translating from en into xx. Please check SOURCE_LANGUAGE and TARGET_LANGUAGES. — {"error_code":"INVALID_LANGUAGE_PAIR"}',
+    )
+    const auth = format('fr', localizeSupertextError(errorForStatus(401, '')))
+    expect(auth).toContain(SIGNUP_URL)
+    expect(auth).toContain(API_KEY_URL)
+    const net = new SupertextError('transport_error', { detail: 'getaddrinfo ENOTFOUND api.supertext.com' })
+    expect(format('en', localizeSupertextError(net))).toBe('Could not reach Supertext: getaddrinfo ENOTFOUND api.supertext.com')
   })
 
   it('writes tag descriptions in the chosen language but never renames tags', () => {
