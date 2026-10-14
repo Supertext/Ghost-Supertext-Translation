@@ -1,6 +1,7 @@
 import { readFileSync, statSync } from 'node:fs'
 
-import { type Language, parsePoliteness, parseTargetLanguages } from './languages.js'
+import { type Language, parseLanguageMap, parsePoliteness, parseTargetLanguages } from './languages.js'
+import { reportsEnabled } from './vendor/supertext-sdk/v1/index.js'
 import { SUPERTEXT_ENVIRONMENTS } from './supertext/client.js'
 
 /**
@@ -20,6 +21,14 @@ export type Config = {
   supertextApiUrl: string
   sourceLanguage: string
   languages: Language[]
+  /** `SUPERTEXT_LANGUAGE_MAP`: configured code → Supertext code (targets and source). */
+  languageMap: Record<string, string>
+  /** "Send version information to Supertext": `SUPERTEXT_VERSION_REPORTS` (default on). */
+  versionReports: boolean
+  /** Public URL of the connector in setup B (`CONNECTOR_URL`), for the ping address; null if not set. */
+  connectorUrl: string | null
+  /** JSON file for the Commando Center state (what was reported, the latest key check). */
+  stateFile: string | null
   /** `en`, `de`, `fr`, `it`, or `auto` (status page follows the browser's Accept-Language). */
   uiLanguage: string
   settingsFile: string | null
@@ -48,7 +57,11 @@ export function loadConfig(): Config {
     }
   }
 
+  const languageMap = parseLanguageMap(env('SUPERTEXT_LANGUAGE_MAP'))
+  const connectorUrl = env('CONNECTOR_URL').replace(/\/+$/, '')
+
   return {
+    connectorUrl: /^https?:\/\/[^/]/i.test(connectorUrl) ? connectorUrl : null,
     ghostSecrets: () => {
       const file = fileSecrets()
       return {
@@ -58,14 +71,17 @@ export function loadConfig(): Config {
     },
     host: env('HOST', '0.0.0.0'),
     jobsFile: env('JOBS_FILE') || null,
-    languages: parseTargetLanguages(env('TARGET_LANGUAGES', 'de-CH,fr-CH'), parsePoliteness(env('SUPERTEXT_POLITENESS'))),
+    languageMap,
+    languages: parseTargetLanguages(env('TARGET_LANGUAGES', 'de-CH,fr-CH'), parsePoliteness(env('SUPERTEXT_POLITENESS')), languageMap),
     port: Number(env('PORT', '8080')),
     settingsFile,
     siteUrl,
     sourceLanguage: env('SOURCE_LANGUAGE', 'en'),
+    stateFile: env('STATE_FILE') || null,
     supertextApiKey: env('SUPERTEXT_API_KEY'),
     supertextApiUrl: env('SUPERTEXT_API_URL', SUPERTEXT_ENVIRONMENTS.live),
     uiLanguage: env('UI_LANGUAGE', 'auto').toLowerCase(),
     upstream,
+    versionReports: reportsEnabled(null, env('SUPERTEXT_VERSION_REPORTS') || null),
   }
 }

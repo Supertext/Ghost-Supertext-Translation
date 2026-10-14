@@ -2,10 +2,11 @@ import { createHash } from 'node:crypto'
 
 import { collect } from './collect.js'
 import { type GhostAdmin, GhostError, type GhostPost, type Resource } from './ghost/admin.js'
-import { type Language, sourceCode } from './languages.js'
+import { type Language, sourceCode, targetCode } from './languages.js'
 import { applyTranslations, buildHtml, parseHtml } from './segments.js'
 import { format, type Localizable } from './i18n/index.js'
-import { API_KEY_URL, SIGNUP_URL, type SupertextClient, SupertextError } from './supertext/client.js'
+import { API_KEY_URL, fromSdkError, SIGNUP_URL, type SupertextClient, SupertextError } from './supertext/client.js'
+import { SupertextError as SdkError } from './vendor/supertext-sdk/v1/index.js'
 
 export type ResultStatus = 'created' | 'updated' | 'kept' | 'skipped' | 'failed'
 
@@ -19,6 +20,9 @@ export type TranslateResult = {
   translationTitle?: string
   /** Paths of segments that came back empty and kept the source text. */
   missing?: string[]
+  /** For a failed Supertext call: the SDK error code and HTTP status (e.g. to notice a rejected key). */
+  errorCode?: string
+  httpStatus?: number
 }
 
 /**
@@ -82,6 +86,8 @@ export type TranslatorOptions = {
   /** Null when no API key is configured: every request then fails with a clear message. */
   supertext: SupertextClient | null
   sourceLanguage: string
+  /** `SUPERTEXT_LANGUAGE_MAP`: configured code → Supertext code. */
+  languageMap?: Record<string, string>
   log?: (message: string) => void
 }
 
@@ -101,7 +107,20 @@ export class Translator {
         err instanceof SupertextError || err instanceof GhostError
           ? err.localized
           : [{ key: 'job.unexpected', params: { error: err instanceof Error ? err.message : String(err) } }]
-      return result('failed', localized)
+      const extra: Partial<TranslateResult> = err instanceof SupertextError ? { errorCode: err.code, ...(err.status ? { httpStatus: err.status } : {}) } : {}
+      return result('failed', localized, extra)
+    }
+  }
+
+  /** The codes and tone sent to Supertext; throws `unsupported_language` / `unsupported_feature` before anything is sent. */
+  private codes(language: Language): { sourceLang: string; targetLang: string; politeness: Language['politeness'] } {
+    try {
+      const sourceLang = sourceCode(this.opts.sourceLanguage, this.opts.languageMap)
+      const targetLang = language.target ?? targetCode(language.code, this.opts.languageMap)
+      if (language.politenessUnsupported === 'blocked') throw new SdkError('unsupported_feature', { feature: 'politeness', targetLang })
+      return { politeness: language.politenessUnsupported === 'ignored' ? 'default' : language.politeness, sourceLang, targetLang }
+    } catch (err) {
+      throw err instanceof SdkError ? fromSdkError(err) : err
     }
   }
 
@@ -120,6 +139,8 @@ export class Translator {
     if (!this.opts.supertext) {
       return result('failed', [{ key: 'job.noApiKey', params: { apiKeyUrl: API_KEY_URL, signupUrl: SIGNUP_URL } }])
     }
+    // Supertext codes: the mapping or an exact match, never a guess. Nothing is sent for an unmapped language.
+    const { sourceLang, targetLang, politeness } = this.codes(language)
 
     const existing = (
       await ghost.findPosts(resource, `codeinjection_head:~'supertext:source=${source.id};lang=${language.code};'`)
@@ -144,12 +165,7 @@ export class Translator {
     this.opts.log?.(
       `Translating ${kind} ${source.id} "${source.title}" into ${language.code}: ${collected.segments.length} segments, ${html.length} characters`,
     )
-    const translatedHtml = await this.opts.supertext.translateHtml({
-      html,
-      politeness: language.politeness,
-      sourceLang: sourceCode(this.opts.sourceLanguage),
-      targetLang: language.target,
-    })
+    const translatedHtml = await this.opts.supertext.translateHtml({ html, politeness, sourceLang, targetLang })
     const missing = applyTranslations(collected.segments, parseHtml(translatedHtml))
 
     const lexical = collected.lexical ? JSON.stringify(collected.lexical) : source.lexical

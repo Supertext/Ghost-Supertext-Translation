@@ -3,6 +3,7 @@ import type { Job } from './jobs.js'
 import { type Language, RETRANSLATE_ALL_TAG, TRANSLATE_ALL_TAG } from './languages.js'
 import { escapeHtml as e } from './segments.js'
 import { API_KEY_URL, SIGNUP_URL } from './supertext/client.js'
+import type { ApiKeyCheck } from './vendor/supertext-sdk/v1/index.js'
 import { releaseUrl } from './version.js'
 
 export type StatusPageData = {
@@ -12,7 +13,11 @@ export type StatusPageData = {
   supertext: { endpoint: string; keyConfigured: boolean }
   webhookSecret: boolean
   sourceLanguage: string
+  /** The Supertext code the source language is sent as; null when it isn't mapped. */
+  sourceTarget?: string | null
   languages: Language[]
+  /** Commando Center: the setting, the ping address and the latest API key check. */
+  reports?: { enabled: boolean; callbackUrl: string | null; check: ApiKeyCheck | null }
   jobs: Job[]
   viewer: string
   /** Connector version (package.json). */
@@ -37,6 +42,16 @@ const versionHtml = (v: string) => {
 
 const tag = (name: string) => `<code class="tag">${e(name)}</code>`
 
+/** The latest API key check in the reader's language (texts from the Commando Center's guide), with its time. */
+function keyCheckHtml(d: StatusPageData, check: ApiKeyCheck | null | undefined): string {
+  const L = (key: MessageKey, params?: Params) => t(d.locale, key, params, e)
+  if (!check) return `<span class="muted">${L('page.notCheckedYet')}</span>`
+  const ok = check.status === 'ok'
+  const text = L(`keycheck.${check.status}` as MessageKey, { status: check.httpStatus ?? '' })
+  const links = check.status === 'invalid' || check.status === 'missing' ? `<br><span class="muted">${L('page.keyHelp', { apiKeyUrl: API_KEY_URL, signupUrl: SIGNUP_URL })}</span>` : ''
+  return `<span class="${ok ? 'ok' : 'bad'}">${text}</span> <span class="muted">${L('page.checkedAt', { time: time(check.checkedAt) })}</span>${links}`
+}
+
 /** The staff-only page at /supertext/: how to translate, recent results, configuration. */
 export function renderStatusPage(d: StatusPageData): string {
   const L = (key: MessageKey, params?: Params) => t(d.locale, key, params, e)
@@ -58,9 +73,16 @@ export function renderStatusPage(d: StatusPageData): string {
     )
     .join('\n')
 
+  const target = (l: Language) => {
+    const code = l.target === null ? `<span class="bad">${L('page.notMapped')}</span>` : `<span class="muted">${e(l.target)}</span>`
+    const tone = l.politenessUnsupported
+      ? `<br><span class="${l.politenessUnsupported === 'blocked' ? 'bad' : 'muted'}">${L(l.politenessUnsupported === 'blocked' ? 'page.politenessBlocked' : 'page.politenessIgnored')}</span>`
+      : ''
+    return `${code}${tone}`
+  }
   const langRows = d.languages
     .map(
-      (l) => `<tr><td>${e(languageLabel(l.code, d.locale))} <span class="muted">${e(l.target)}</span></td><td>${tag(l.translateTag)}</td><td>${tag(
+      (l) => `<tr><td>${e(languageLabel(l.code, d.locale))} ${target(l)}</td><td>${tag(l.translateTag)}</td><td>${tag(
         l.retranslateTag,
       )}</td><td>${tag(l.langTag)}</td></tr>`,
     )
@@ -129,7 +151,9 @@ ${rows}
 </section>
 <section id="languages">
   <h2>${L('page.languagesTitle')}</h2>
-  <p>${L('page.sourceLanguage')} <strong>${e(languageLabel(d.sourceLanguage, d.locale))}</strong> <span class="muted">${e(d.sourceLanguage)}</span></p>
+  <p>${L('page.sourceLanguage')} <strong>${e(languageLabel(d.sourceLanguage, d.locale))}</strong> ${
+    d.sourceTarget === null ? `<span class="bad">${L('page.notMapped')}</span>` : `<span class="muted">${e(d.sourceTarget ?? d.sourceLanguage)}</span>`
+  }</p>
   <table><thead><tr><th>${L('page.colTarget')}</th><th>${L('page.colTranslate')}</th><th>${L('page.colRetranslate')}</th><th>${L('page.colMarks')}</th></tr></thead><tbody>
 ${langRows}
   </tbody></table>
@@ -139,9 +163,13 @@ ${langRows}
   <dl>
     <dt>${L('page.supertextApi')}</dt><dd>${e(d.supertext.endpoint)}</dd>
     <dt>${L('page.apiKey')}</dt><dd>${d.supertext.keyConfigured ? `<span class="ok">${L('page.configured')}</span>` : `<span class="bad">${L('page.missing')}</span> ${L('page.missingKeyHint')}`}<br><span class="muted">${L('page.keyHelp', { apiKeyUrl: API_KEY_URL, signupUrl: SIGNUP_URL })}</span></dd>
+    <dt>${L('page.keyCheck')}</dt><dd>${keyCheckHtml(d, d.reports?.check)}</dd>
     <dt>${L('page.ghost')}</dt><dd>${d.ghost.ok ? `<span class="ok">${L('page.connected')}</span> ${e(d.ghost.detail)}` : `<span class="bad">${L('page.notConnected')}</span> — ${e(d.ghost.detail)}`}</dd>
     <dt>${L('page.webhookSignature')}</dt><dd>${d.webhookSecret ? `<span class="ok">${L('page.checked')}</span>` : `<span class="bad">${L('page.notChecked')}</span> ${L('page.webhookHint')}`}</dd>
     <dt>${L('page.version')}</dt><dd>${versionHtml(d.version)}</dd>
+    <dt>${L('page.reports')}</dt><dd>${
+      d.reports?.enabled === false ? L('page.reportsOff') : `${L('page.reportsOn')}${d.reports?.callbackUrl ? ` <span class="muted">· ${L('page.pingUrl')}: ${e(d.reports.callbackUrl)}</span>` : ''}`
+    }<br><span class="muted">${L('page.reportsHelp')}</span></dd>
     <dt>${L('page.signedInAs')}</dt><dd>${e(d.viewer)}</dd>
   </dl>
 </section>

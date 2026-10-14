@@ -4,6 +4,8 @@
  * end-to-end checks of the demo. Answers like the real API and returns real German for
  * the demo's sample post (sample-de.json, keyed by the inline HTML of each segment).
  * Other text comes back as "[<target>] text". Listens on :8765 (any API key).
+ * It also answers the Commando Center's `POST /report` with 202 (point SUPERTEXT_REPORT_URL at
+ * http://<host>:8765/report), so screenshot runs never report to the live center.
  */
 import http from 'node:http'
 import { randomBytes } from 'node:crypto'
@@ -20,6 +22,10 @@ http
       res.end(type === 'application/json' ? JSON.stringify(body) : body)
     }
     if (path === '/features') return send(200, {})
+    if (req.method === 'POST' && (path === '/report' || path === '/api/v1/report')) {
+      for await (const chunk of req) void chunk
+      return send(202, { ok: true })
+    }
     if (req.method === 'POST') {
       const chunks = []
       for await (const chunk of req) chunks.push(chunk)
@@ -27,8 +33,9 @@ http
       const id = randomBytes(6).toString('hex')
       const target = String(form.get('target_lang'))
       const source = form.get('source_lang')
-      // Like the real API: bare targets (`de`) and regional sources (`de-CH`) are rejected.
-      if (!target.includes('-') || (typeof source === 'string' && source.includes('-'))) return send(400, { error_code: 'INVALID_LANGUAGE_PAIR' })
+      // Like the real API: only the codes of `GET features` (a few listed here); `de`, `es-ES`, `zh-CN` or a regional source are rejected.
+      const targets = ['de-CH', 'de-DE', 'de-AT', 'fr-CH', 'fr-FR', 'it-CH', 'it-IT', 'en-US', 'en-GB', 'es', 'nl', 'pt-BR', 'pt-PT']
+      if (!targets.includes(target) || (typeof source === 'string' && source.includes('-'))) return send(404, { error_code: 'INVALID_LANGUAGE_PAIR' })
       files.set(id, { html: await form.get('file').text(), target })
       return send(200, { file_id: id })
     }

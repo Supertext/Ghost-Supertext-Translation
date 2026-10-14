@@ -5,7 +5,8 @@ import { GhostAdmin, GhostError } from './ghost/admin.js'
 import { parseWebhook, verifySignature } from './ghost/webhook.js'
 import { JobLog } from './jobs.js'
 import { format, isUiLocale, pickLocale, t, type UiLocale } from './i18n/index.js'
-import { managedTags, requestsFromTags } from './languages.js'
+import { managedTags, requestsFromTags, sourceCodeOrNull } from './languages.js'
+import { PING_PATH, Reporting } from './reporting.js'
 import { renderStatusPage } from './status-page.js'
 import { VERSION } from './version.js'
 import { SupertextClient } from './supertext/client.js'
@@ -22,9 +23,18 @@ export type App = {
   /** Resolves when every translation started so far has finished (tests). */
   idle: () => Promise<void>
   ensureTags: () => Promise<void>
+  /** Commando Center: version reports, API key check, ping. */
+  reporting: Reporting
 }
 
-export function createApp(config: Config, deps: { fetch?: typeof fetch; supertextPollMs?: number } = {}): App {
+export type AppDeps = {
+  fetch?: typeof fetch
+  supertextPollMs?: number
+  /** Tests: options for the SDK's version reporter (fetch, report URL, clock). */
+  reporterOverrides?: ConstructorParameters<typeof Reporting>[1]['reporterOverrides']
+}
+
+export function createApp(config: Config, deps: AppDeps = {}): App {
   const jobs = new JobLog(config.jobsFile)
   const pending = new Set<Promise<unknown>>()
   // Ghost is reached directly in proxy mode (no round trip through the public URL).
@@ -43,6 +53,24 @@ export function createApp(config: Config, deps: { fetch?: typeof fetch; supertex
         pollIntervalMs: deps.supertextPollMs,
       })
     : null
+
+  // Ghost's version for the version reports, asked at most every 10 minutes.
+  let ghostVersionCache: { at: number; version: string | null } | null = null
+  const ghostVersion = async (): Promise<string | null> => {
+    if (ghostVersionCache && Date.now() - ghostVersionCache.at < 600_000) return ghostVersionCache.version
+    const g = ghost()
+    let version: string | null = null
+    if (g) version = (await g.site().catch(() => null))?.version ?? null
+    ghostVersionCache = { at: Date.now(), version }
+    return version
+  }
+  const reporting = new Reporting(config, { fetch: deps.fetch, ghostVersion, log, reporterOverrides: deps.reporterOverrides })
+  /** Reporter runs in the background; tracked so `idle()` (tests, shutdown) can wait for them. */
+  const report = (action: 'onRequest' | 'authenticationFailed', httpStatus?: number) => {
+    const p = reporting.inBackground(action, httpStatus)
+    pending.add(p)
+    void p.finally(() => pending.delete(p))
+  }
 
   async function ensureTags(): Promise<void> {
     const g = ghost()
@@ -80,7 +108,7 @@ export function createApp(config: Config, deps: { fetch?: typeof fetch; supertex
       log('Translation requested, but no Ghost Admin API key is configured')
       return
     }
-    const translator = new Translator({ ghost: g, log, sourceLanguage: config.sourceLanguage, supertext })
+    const translator = new Translator({ ghost: g, languageMap: config.languageMap, log, sourceLanguage: config.sourceLanguage, supertext })
     for (const { force, language } of requests) {
       if (jobs.isRunning(event.id, language.code)) continue
       const job = jobs.start({
@@ -96,6 +124,9 @@ export function createApp(config: Config, deps: { fetch?: typeof fetch; supertex
         jobs.finish(job, result)
         log(`#${job.id} ${result.status}: ${result.message}`)
         if (result.missing?.length) log(`#${job.id} empty in the response: ${result.missing.join(', ')}`)
+        // Commando Center: a rejected key marks the key check invalid; otherwise check for upgrades / a changed key.
+        if (result.errorCode === 'authentication_failure') report('authenticationFailed', result.httpStatus ?? 401)
+        else report('onRequest')
       })
       pending.add(p)
       void p.finally(() => pending.delete(p))
@@ -133,6 +164,7 @@ export function createApp(config: Config, deps: { fetch?: typeof fetch; supertex
       res.writeHead(302, { Location: `${config.siteUrl}/ghost/#/signin` })
       return void res.end()
     }
+    report('onRequest')
     const locale = pickLocale(config.uiLanguage, header(req, 'accept-language'))
     const g = ghost()
     let ghostState = { detail: t(locale, 'page.noGhostKey'), ok: false }
@@ -141,6 +173,7 @@ export function createApp(config: Config, deps: { fetch?: typeof fetch; supertex
       try {
         const site = await g.site()
         siteTitle = site.title ?? siteTitle
+        if (site.version) ghostVersionCache = { at: Date.now(), version: site.version }
         ghostState = { detail: `(Ghost ${site.version ?? ''})`.replace(' )', ')'), ok: true }
       } catch (err) {
         ghostState = { detail: err instanceof GhostError ? format(locale, err.localized) : err instanceof Error ? err.message : String(err), ok: false }
@@ -151,9 +184,11 @@ export function createApp(config: Config, deps: { fetch?: typeof fetch; supertex
       jobs: jobs.list(),
       languages: config.languages,
       locale,
+      reports: { callbackUrl: reporting.callbackUrl, check: reporting.lastCheck(), enabled: reporting.enabled },
       siteTitle,
       siteUrl: config.siteUrl,
       sourceLanguage: config.sourceLanguage,
+      sourceTarget: sourceCodeOrNull(config.sourceLanguage, config.languageMap),
       supertext: { endpoint: config.supertextApiUrl, keyConfigured: Boolean(supertext) },
       version: VERSION,
       viewer: `${user.name} (${user.email})`,
@@ -188,6 +223,16 @@ export function createApp(config: Config, deps: { fetch?: typeof fetch; supertex
     const run = async () => {
       if (path === '/supertext/webhook' && req.method === 'POST') return handleWebhook(req, res, url)
       if (path === '/supertext/health') return handleHealth(res)
+      // Public, no login, never proxied or cached: the Commando Center checks that the connector is reachable.
+      if (path === PING_PATH) {
+        if (req.method !== 'GET') {
+          res.writeHead(405, { Allow: 'GET', 'Cache-Control': 'no-store', 'Content-Type': 'text/plain; charset=utf-8' })
+          return void res.end('Method not allowed')
+        }
+        const answer = reporting.ping(url.searchParams.get('challenge'))
+        res.writeHead(answer.status, answer.headers)
+        return void res.end(answer.body)
+      }
       // Under /ghost/ so the browser sends Ghost's staff session cookie (its path is /ghost).
       if (path === STATUS_PATH || path === STATUS_PATH.slice(0, -1)) return handleStatus(req, res)
       if (path === '/supertext' || path === '/supertext/') {
@@ -210,6 +255,7 @@ export function createApp(config: Config, deps: { fetch?: typeof fetch; supertex
       while (pending.size) await Promise.allSettled([...pending])
     },
     jobs,
+    reporting,
     server,
   }
 }

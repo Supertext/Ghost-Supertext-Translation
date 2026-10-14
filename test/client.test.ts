@@ -128,7 +128,7 @@ describe('rate limiting', () => {
   })
 
   it('honours Retry-After', async () => {
-    const { retryDelayMs } = await import('../src/vendor/supertext-sdk/index.js')
+    const { retryDelayMs } = await import('../src/vendor/supertext-sdk/v1/index.js')
     expect(retryDelayMs(0, '3')).toBe(3000)
     expect(retryDelayMs(1, null)).toBeGreaterThanOrEqual(2000)
   })

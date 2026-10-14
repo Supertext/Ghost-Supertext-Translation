@@ -1,11 +1,15 @@
 import { parse } from 'node-html-parser'
 
+import { Languages } from '../src/vendor/supertext-sdk/v1/index.js'
+
 export type Call = { method: string; url: string; form?: FormData }
 
 /**
  * In-memory stand-in for the Supertext AI file API. "Translates" by prefixing every
  * segment with `[<target_lang>] `. `statuses` scripts the status sequence per file.
- * Like the real API, it rejects bare targets (`de`) and regional sources (`de-CH`).
+ * Like the real API, it accepts only the codes of `GET features` (the SDK's `Languages`): it rejects
+ * `de`, `es-ES` or `zh-CN` as targets and regional sources (`de-CH`) with INVALID_LANGUAGE_PAIR, and
+ * formal/informal for a target without it (`en-US`) with FEATURE_ERROR.
  */
 export function fakeSupertext(opts: { statuses?: string[]; drop?: number[]; failStatus?: number; rateLimited?: number } = {}) {
   const calls: Call[] = []
@@ -36,8 +40,10 @@ export function fakeSupertext(opts: { statuses?: string[]; drop?: number[]; fail
     if (method === 'POST' && url.endsWith('translate/ai/file')) {
       const target = String(form?.get('target_lang') ?? '')
       const source = form?.get('source_lang')
-      if (!target.includes('-') || (typeof source === 'string' && source.includes('-'))) {
-        return new Response('{"error_code":"INVALID_LANGUAGE_PAIR"}', { status: 400 })
+      const known = Languages.TARGETS.some((l) => l.code === target) && (typeof source !== 'string' || Languages.SOURCES.some((l) => l.code === source))
+      if (!known) return new Response('{"error_code":"INVALID_LANGUAGE_PAIR"}', { status: 404 })
+      if (form?.has('politeness') && Languages.supportsPoliteness(target) === false) {
+        return new Response(JSON.stringify({ error_code: 'FEATURE_ERROR', feature: 'politeness', target_lang: target }), { status: 400 })
       }
       const file = form?.get('file') as Blob
       const id = `f${++n}`

@@ -8,17 +8,19 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - French and Italian interface (and German where it was missing): the status page, its messages and the tag descriptions are available in English, German, French and Italian. The status page follows the browser's language; `UI_LANGUAGE` sets one language for everyone and for new tag descriptions.
 - The status page shows the connector version (linked to its GitHub release), and the startup log names it. Ghost has no plugin list, so this is where administrators see which version runs.
+- Automatic API key check: at startup and whenever the key in `SUPERTEXT_API_KEY` is new or changed, and when Supertext rejects the key during a translation. The status page shows the latest result with its time (*the connection works*, *rejected*, *no key*, *Supertext can't be reached*, *error*) in English, German, French and Italian, with the account and API key links where they help.
+- *Send version information to Supertext* (on by default, `SUPERTEXT_VERSION_REPORTS=0` turns it off): after an update and when the key check result changes, the connector sends the site URL, the connector, Ghost, Node.js and SDK versions, whether a key is set, the key check result and the ping address to Supertext. No content, no API key and no personal data. Shown on the status page.
+- Public ping endpoint `GET /supertext/ping` that only echoes Supertext's challenge, so Supertext can check the installation is reachable (404 with version reports off). Its address is the site's own host in setup A, `CONNECTOR_URL` (new setting) in setup B.
+- New setting `STATE_FILE` for this state (what was reported, the latest key check); the demo keeps it in its volume.
+- New setting `SUPERTEXT_LANGUAGE_MAP` (`de=de-CH,zh=zh-Hans`): which Supertext language each configured language is sent as.
 
 ### Changed
 
-- All Supertext API calls now go through the official Supertext SDK, bundled with the connector (nothing extra to install). Behaviour stays the same.
+- All Supertext API calls now go through the official Supertext SDK, bundled with the connector (nothing extra to install): SDK 0.2.1 (commit `eeba8fa`, `v1` namespace) with the key check, the version reports and the API's language list.
+- **Languages are no longer guessed.** A code in `TARGET_LANGUAGES` or `SOURCE_LANGUAGE` that is a Supertext code (`de-CH`, `fr-CH`, `es`, `zh-Hans`, apart from case and `_`/`-`) is used as it is; every other code needs an entry in `SUPERTEXT_LANGUAGE_MAP`. There are no default regions any more: they were wrong for most languages (Supertext wants `es`, `sl`, `nl` without region, `zh-Hans` instead of `zh-CN`). An unmapped language gets the message *has no Supertext language yet* (four languages) and nothing is sent for it; the startup log and the status page mark it *Not mapped*. A site that listed a bare `de` adds `SUPERTEXT_LANGUAGE_MAP=de=de-DE` (tags don't change).
+- Formal/informal for a language Supertext offers no tone for (English, Swiss German, Romansh, Albanian, Serbian): set for that language, its translations fail with the new message *Supertext offers no formal or informal tone for this language* (nothing is sent); set for all languages, that language is translated with the default tone. The status page shows both.
 - An unsupported language pair now has its own message ("Supertext does not support this language pair (en → xx-YY)") in all four interface languages. An unknown language (e.g. `xx-YY`) is now reported as an unsupported language pair too, not as "resource not found" (Supertext answers it with HTTP 404).
 - The "No Supertext API key" and "Authentication failure" messages now link to Supertext account signup as well as API key generation.
-
-### Fixed
-
-- Target languages without a region (e.g. `de` in `TARGET_LANGUAGES`) are now sent to Supertext as `de-DE` (`fr` → `fr-FR`, `en` → `en-US`, …); Supertext rejected them with `INVALID_LANGUAGE_PAIR`. Regional codes are normalized (`de_ch` → `de-CH`). Tag names don't change.
-- Language codes with a variant, such as `de_DE_formal` or `en-US-x-twain`, are sent to Supertext as `de-DE` and `en-US` (bundled SDK updated to commit `aba02dd`).
 
 ## [0.1.0] - 2026-10-07
 

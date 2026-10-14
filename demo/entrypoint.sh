@@ -16,6 +16,7 @@ export GHOST_UPSTREAM="http://127.0.0.1:2368"
 DATA="$GHOST_CONTENT/data"
 export GHOST_SETTINGS_FILE="${GHOST_SETTINGS_FILE:-$DATA/supertext.json}"
 export JOBS_FILE="${JOBS_FILE:-$DATA/supertext-jobs.json}"
+export STATE_FILE="${STATE_FILE:-$DATA/supertext-state.json}"
 mkdir -p "$DATA"
 chown node:node "$GHOST_CONTENT" "$DATA"
 

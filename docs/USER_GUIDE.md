@@ -76,7 +76,9 @@ The status page follows your browser's language (English, German, French or Ital
 | Skipped | You added the tag to a translation, not to an original. | Add the tag to the original post. |
 | Failed: "… no content in Ghost's current editor format" | The post was written in Ghost's old editor. | Open it, make any small change, save, then add the tag again. |
 | Failed: "Authentication failure …" or "No Supertext API key …" | The site's Supertext settings are wrong. | Tell your administrator. They can generate a key at supertext.com → Integrations → API (see the [installation guide](INSTALLATION.md#api-key)). |
-| Failed: "Supertext does not support this language pair (en → …)" | Supertext can't translate between these two languages, or a language code in the settings is wrong. | Tell your administrator. |
+| Failed: "Supertext does not support this language pair (en → …)" | Supertext can't translate between these two languages, or the language mapping in the settings is wrong. | Tell your administrator. |
+| Failed: "The language … has no Supertext language yet" | Your administrator hasn't told the connector which Supertext language to use for it. Nothing was sent to Supertext. | Ask your administrator to map it; the other languages are translated. |
+| Failed: "Supertext offers no formal or informal tone for this language" | The tone setting for that language isn't available at Supertext (English, Swiss German, Romansh, Albanian, Serbian). | Ask your administrator to set it to the default tone. |
 | Failed: "… translation limit is exceeded" | Your Supertext subscription is used up. | Tell your administrator. |
 | Failed: "Interrupted by a restart" | The server restarted while translating. | Remove the tag, then add it again. |
 | "… text part(s) came back empty" | A few pieces stayed in the original language. | Translate those pieces by hand in the draft. |

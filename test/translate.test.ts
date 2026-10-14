@@ -132,6 +132,34 @@ describe('Translator', () => {
     expect((await old.translator.translate('posts', legacy.id, de, false)).message).toContain("Ghost's current editor format")
   })
 
+  it('sends nothing for a language without a Supertext code', async () => {
+    const { source, st, translator } = setup()
+    const [unmapped] = parseTargetLanguages('de')
+    const result = await translator.translate('posts', source.id, unmapped!, false)
+    expect(result).toMatchObject({ errorCode: 'unsupported_language', status: 'failed' })
+    expect(result.message).toBe('The language German (de) has no Supertext language yet. Ask your administrator to map it (SUPERTEXT_LANGUAGE_MAP, e.g. de=de-CH).')
+    expect(st.calls).toHaveLength(0)
+  })
+
+  it('sends a mapped language with its Supertext code', async () => {
+    const { source, st, translator } = setup()
+    const [mapped] = parseTargetLanguages('es', {}, {})
+    expect((await translator.translate('posts', source.id, mapped!, false)).status).toBe('created')
+    expect(st.calls[0]!.form!.get('target_lang')).toBe('es')
+  })
+
+  it('refuses a tone the target lacks when it was set for that language, and drops one set for all', async () => {
+    const { source, st, translator } = setup()
+    const [blocked] = parseTargetLanguages('en-US', { 'en-us': 'more' })
+    const result = await translator.translate('posts', source.id, blocked!, false)
+    expect(result).toMatchObject({ errorCode: 'unsupported_feature', status: 'failed' })
+    expect(result.message).toContain('Supertext offers no formal or informal tone for this language')
+    expect(st.calls).toHaveLength(0)
+    const [ignored] = parseTargetLanguages('en-US', { '*': 'more' })
+    expect((await translator.translate('posts', source.id, ignored!, false)).status).toBe('created')
+    expect(st.calls[0]!.form!.has('politeness')).toBe(false)
+  })
+
   it('reports segments that came back empty', async () => {
     const { source, translator } = setup({ supertext: { drop: [2] } })
     const result = await translator.translate('posts', source.id, de, false)
@@ -144,24 +172,33 @@ describe('webhook server', () => {
   let close: (() => void) | undefined
   afterEach(() => close?.())
 
-  async function start(env: Partial<Config> = {}) {
-    const s = setup()
+  async function start(env: Partial<Config> = {}, opts: { supertext?: Parameters<typeof fakeSupertext>[0] } = {}) {
+    const s = setup(opts)
+    const reports: Array<Record<string, any>> = []
+    const center = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+      reports.push(JSON.parse(String(init?.body)))
+      return new Response('{"ok":true}', { status: 202 })
+    }) as typeof fetch
     const config: Config = {
+      connectorUrl: null,
       ghostSecrets: () => ({ adminKey: ADMIN_KEY, webhookSecret: 'whsec' }),
       host: '127.0.0.1',
       jobsFile: null,
+      languageMap: {},
       languages: parseTargetLanguages('de-CH,fr-CH'),
       port: 0,
       settingsFile: null,
       siteUrl: 'https://ghost.test',
       sourceLanguage: 'en',
+      stateFile: null,
       supertextApiKey: 'test-key',
       supertextApiUrl: 'https://api.test/v1/',
       uiLanguage: 'auto',
       upstream: null,
+      versionReports: false,
       ...env,
     }
-    const app = createApp(config, { fetch: s.fetchImpl, supertextPollMs: 100 })
+    const app = createApp(config, { fetch: s.fetchImpl, reporterOverrides: { fetch: center, reportUrl: 'https://center.test/api/v1/report' }, supertextPollMs: 100 })
     await new Promise<void>((r) => app.server.listen(0, '127.0.0.1', r))
     close = () => app.server.close()
     const base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`
@@ -171,7 +208,7 @@ describe('webhook server', () => {
       const sig = `sha256=${createHmac('sha256', secret).update(raw + t).digest('hex')}, t=${t}`
       return fetch(`${base}/supertext/webhook?event=${event}`, { body: raw, headers: { 'X-Ghost-Signature': sig }, method: 'POST' })
     }
-    return { ...s, app, base, post }
+    return { ...s, app, base, post, reports }
   }
 
   it('translates when a request tag is added and records the job', async () => {
@@ -209,6 +246,34 @@ describe('webhook server', () => {
     const count = ghost.tags.size
     await app.ensureTags()
     expect(ghost.tags.size).toBe(count)
+  })
+
+  it('answers the public ping only while version reports are on', async () => {
+    const on = await start({ versionReports: true })
+    const ok = await fetch(`${on.base}/supertext/ping?challenge=abcdefghijklmnop1234`)
+    expect([ok.status, ok.headers.get('content-type'), ok.headers.get('cache-control')]).toEqual([200, 'application/json', 'no-store'])
+    expect(await ok.json()).toEqual({ challenge: 'abcdefghijklmnop1234', ok: true, plugin: 'Ghost-Supertext-Translation' })
+    expect((await fetch(`${on.base}/supertext/ping?challenge=short`)).status).toBe(400)
+    expect((await fetch(`${on.base}/supertext/ping`, { method: 'POST' })).status).toBe(405)
+    close?.()
+    const off = await start({ versionReports: false })
+    expect((await fetch(`${off.base}/supertext/ping?challenge=abcdefghijklmnop1234`)).status).toBe(404)
+  })
+
+  it('reports the installation after a translation, and a rejected key once', async () => {
+    const body = (id: string) => ({ post: { current: { id, tags: [{ slug: 'hash-translate-de-ch' }], title: 'x' }, previous: { tags: [] } } })
+    const good = await start({ versionReports: true })
+    await good.post(body(good.source.id), 'post.edited')
+    await good.app.idle()
+    expect(good.reports.map((r) => [r.event, r.system, r.api_key_check?.status])).toEqual([['installed', { name: 'Ghost', version: '6.67' }, 'ok']])
+    close?.()
+
+    const bad = await start({ versionReports: true }, { supertext: { failStatus: 401 } })
+    await bad.post(body(bad.source.id), 'post.edited')
+    await bad.app.idle()
+    expect(bad.app.jobs.list()[0]?.status).toBe('failed')
+    expect(bad.reports.at(-1)).toMatchObject({ api_key_check: { http_status: 401, status: 'invalid' } })
+    expect(bad.app.reporting.lastCheck()?.status).toBe('invalid')
   })
 
   it('serves a health check and hides the status page without a Ghost in front', async () => {

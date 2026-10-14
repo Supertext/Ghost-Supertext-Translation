@@ -7,7 +7,7 @@
  *   3. GET    translate/ai/file/{id}/translation    download the translated HTML
  *   4. DELETE translate/ai/file/{id}                cleanup, also after errors
  * plus the `Authorization: Supertext-Auth-Key <key>` header (a pasted prefix is stripped),
- * HTTP 429 retries and the language codes (bare source, regional target). SDK errors come
+ * HTTP 429 retries. Language codes are resolved before (src/languages.ts). SDK errors come
  * out as this module's SupertextError, whose message is translated in the status page.
  */
 
@@ -18,7 +18,7 @@ import {
   SupertextClient as SdkClient,
   SupertextError as SdkError,
   type FetchLike,
-} from '../vendor/supertext-sdk/index.js'
+} from '../vendor/supertext-sdk/v1/index.js'
 
 /** Where administrators log in to or create a Supertext account. */
 export const SIGNUP_URL = 'https://www.supertext.com/person/en/account/signin'
@@ -91,9 +91,9 @@ export type SupertextClientOptions = {
 
 export type TranslateFileArgs = {
   html: string
-  /** Any form (`de`, `de_ch`): sent as a regional code. */
+  /** A Supertext target code (`de-CH`, `es`; see `targetCode` in src/languages.ts), sent as it is. */
   targetLang: string
-  /** Any form: sent as the bare language; omit for auto-detection. */
+  /** A Supertext source code (`en`); omit for auto-detection. */
   sourceLang?: string
   politeness?: Politeness
 }
@@ -110,8 +110,10 @@ export function fromSdkError(error: SdkError): SupertextError {
           ? { error: error.detail ?? '' }
           : code === 'invalid_language_pair'
             ? { source: error.sourceLang ?? '?', target: error.targetLang ?? '?' }
-            : {}
-  const detail = code === 'transport_error' || code === 'invalid_language_pair' ? '' : (error.detail ?? '')
+            : code === 'unsupported_language'
+              ? { code: error.targetLang ?? error.sourceLang ?? '?', language: error.targetLang ?? error.sourceLang ?? '?' }
+              : {}
+  const detail = code === 'transport_error' || code === 'invalid_language_pair' || code === 'unsupported_language' ? '' : (error.detail ?? '')
   return new SupertextError(code, { detail, params, status: error.status })
 }
 

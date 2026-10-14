@@ -1,6 +1,6 @@
 import { languageLabel, t, type UiLocale } from './i18n/index.js'
 import type { Politeness } from './supertext/client.js'
-import { LanguageCodes } from './vendor/supertext-sdk/index.js'
+import { Languages, type LanguageMapping } from './vendor/supertext-sdk/v1/index.js'
 
 /**
  * A target language and the Ghost internal tags that belong to it.
@@ -11,13 +11,23 @@ import { LanguageCodes } from './vendor/supertext-sdk/index.js'
 export type Language = {
   /** Code as configured, e.g. `de-CH` or `de`. Used in markers, logs and messages. */
   code: string
-  /** Code sent to Supertext as target: always regional (`de` → `de-DE`), see `targetCode`. */
-  target: string
+  /**
+   * Code sent to Supertext as target (`SUPERTEXT_LANGUAGE_MAP`, else an exact Supertext code),
+   * or null when the language isn't mapped: requests for it fail with `unsupported_language`.
+   */
+  target: string | null
   /** Lower-case code used in tag names and URLs, e.g. `de-ch`. */
   slug: string
   /** English display name, e.g. `German (Switzerland)`. */
   label: string
+  /** Formal/informal as configured for this language (or for all languages). */
   politeness: Politeness
+  /**
+   * Supertext offers no formal/informal choice for the target (`Languages.supportsPoliteness`):
+   * `blocked` = set for this language, requests fail with `unsupported_feature` until it is removed;
+   * `ignored` = set for all languages, this one is sent with the default tone. Shown on the status page.
+   */
+  politenessUnsupported: 'blocked' | 'ignored' | null
   /** `#lang-de-ch`: marks a translation. */
   langTag: string
   /** `#translate-de-ch`: request a translation. */
@@ -37,7 +47,7 @@ const languageSlug = (code: string) => code.trim().toLowerCase().replace(/_/g, '
 export { languageLabel }
 
 /** `de-CH,fr-CH` → languages. Duplicates and blanks are dropped. */
-export function parseTargetLanguages(value: string, politeness: Record<string, Politeness> = {}): Language[] {
+export function parseTargetLanguages(value: string, politeness: Record<string, Politeness> = {}, mapping: LanguageMapping = {}): Language[] {
   const seen = new Set<string>()
   const out: Language[] = []
   for (const raw of value.split(/[\s,;]+/)) {
@@ -46,12 +56,17 @@ export function parseTargetLanguages(value: string, politeness: Record<string, P
     const slug = languageSlug(code)
     if (seen.has(slug)) continue
     seen.add(slug)
+    const target = targetCodeOrNull(code, mapping)
+    const own = politeness[slug]
+    const tone = own ?? politeness['*'] ?? 'default'
+    const unsupported = tone !== 'default' && target !== null && Languages.supportsPoliteness(target) === false
     out.push({
       code,
-      target: targetCode(code),
+      target,
       label: languageLabel(code),
       langTag: `#lang-${slug}`,
-      politeness: politeness[slug] ?? politeness['*'] ?? 'default',
+      politeness: tone,
+      politenessUnsupported: unsupported ? (own ? 'blocked' : 'ignored') : null,
       retranslateTag: `#retranslate-${slug}`,
       slug,
       translateTag: `#translate-${slug}`,
@@ -73,20 +88,57 @@ export function parsePoliteness(value: string | undefined): Record<string, Polit
 }
 
 /**
- * Language codes come from the Supertext SDK, so every plugin uses the same rules:
- * the target is always regional (`de` → `de-DE`, `fr_ch` → `fr-CH`; Supertext rejects
- * bare targets with INVALID_LANGUAGE_PAIR), the source is the bare language (`en-GB` → `en`).
+ * `de=de-CH,zh=zh-Hans` (or JSON `{"de":"de-CH"}`) → mapping of configured codes to Supertext
+ * codes (`SUPERTEXT_LANGUAGE_MAP`). One mapping serves targets and the source language.
  */
-export const DEFAULT_REGIONS: Readonly<Record<string, string>> = LanguageCodes.DEFAULT_REGIONS
+export function parseLanguageMap(value: string | undefined): Record<string, string> {
+  const raw = (value ?? '').trim()
+  if (!raw) return {}
+  if (raw.startsWith('{')) {
+    try {
+      const json = JSON.parse(raw) as unknown
+      if (!json || typeof json !== 'object' || Array.isArray(json)) return {}
+      return Object.fromEntries(Object.entries(json).filter((e): e is [string, string] => typeof e[1] === 'string' && e[1].trim() !== '').map(([k, v]) => [k.trim(), v.trim()]))
+    } catch {
+      return {}
+    }
+  }
+  const out: Record<string, string> = {}
+  for (const part of raw.split(/[\s,;]+/)) {
+    const [from, to] = part.split('=')
+    if (from?.trim() && to?.trim()) out[from.trim()] = to.trim()
+  }
+  return out
+}
 
-/** `de_ch` / `DE-ch` → `de-CH`; scripts and numeric regions keep their form (`zh-Hant`, `es-419`). */
-export const normalizeTag = (code: string): string => LanguageCodes.normalize(code)
+/**
+ * Language codes come from the Supertext SDK (`Languages`), so every plugin uses the same rules
+ * and nothing is guessed: the mapping wins, else a code that equals a Supertext code apart from
+ * case and `_`/`-` (`de-CH`, `fr_ch` → `fr-CH`, `es`), else `SupertextError('unsupported_language')`.
+ * There are no default regions: `de` must be mapped (`de=de-CH`).
+ */
+export const targetCode = (code: string, mapping: LanguageMapping = {}): string => Languages.target(code, mapping)
 
-/** Supertext target code: always regional; unknown bare codes are sent unchanged. */
-export const targetCode = (code: string): string => LanguageCodes.target(code)
+/** The target code, or null when the language isn't mapped (status page, startup log). */
+export function targetCodeOrNull(code: string, mapping: LanguageMapping = {}): string | null {
+  try {
+    return Languages.target(code, mapping)
+  } catch {
+    return null
+  }
+}
 
-/** Supertext source code: the bare language. */
-export const sourceCode = (code: string): string => LanguageCodes.source(code)
+/** Supertext source code: the mapping's value or the code, as a bare language (`en-GB` → `en`). */
+export const sourceCode = (code: string, mapping: LanguageMapping = {}): string => Languages.source(code, mapping)
+
+/** The source code, or null when it isn't a Supertext source language. */
+export function sourceCodeOrNull(code: string, mapping: LanguageMapping = {}): string | null {
+  try {
+    return Languages.source(code, mapping)
+  } catch {
+    return null
+  }
+}
 
 export type Request = { language: Language; force: boolean }
 

@@ -3,7 +3,7 @@ import { CATALOGS, format, pickLocale, t, UI_LOCALES } from '../src/i18n/index.j
 import { managedTags, parseTargetLanguages } from '../src/languages.js'
 import { renderStatusPage, type StatusPageData } from '../src/status-page.js'
 import { fromSdkError, SupertextError } from '../src/supertext/client.js'
-import { errorForStatus } from '../src/vendor/supertext-sdk/index.js'
+import { errorForStatus } from '../src/vendor/supertext-sdk/v1/index.js'
 
 const placeholders = (s: string) => [...s.matchAll(/\{\w+\}|<[^>]+>|https?:\/\/\S+/g)].map((m) => m[0]).sort()
 
