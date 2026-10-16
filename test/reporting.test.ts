@@ -8,6 +8,8 @@ import type { Config } from '../src/config.js'
 import { parseTargetLanguages } from '../src/languages.js'
 import { callbackUrl, PLUGIN_NAME, Reporting, StateStore } from '../src/reporting.js'
 import { renderStatusPage, type StatusPageData } from '../src/status-page.js'
+import { SDK_VERSION } from '../src/vendor/supertext-sdk/index.js'
+import { apiKeyFingerprint } from '../src/vendor/supertext-sdk/v1/index.js'
 import { VERSION } from '../src/version.js'
 import { fakeSupertext } from './fakeSupertext.js'
 
@@ -113,6 +115,7 @@ describe('reports', () => {
       event: 'installed',
       plugin: { name: 'Ghost-Supertext-Translation', version: VERSION },
       schema: 1,
+      sdk_version: SDK_VERSION,
       site_url: 'https://blog.example.com',
       system: { name: 'Ghost', version: '6.67' },
     })
@@ -123,6 +126,19 @@ describe('reports', () => {
     expect(await r.run('onRequest')).toMatchObject({ event: null, sent: false })
     expect(center.reports).toHaveLength(1)
     expect(st.calls).toHaveLength(1)
+  })
+
+  it('keeps the state the SDK 0.2 reporter stored: no new installed report', async () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'st-state-')), 'state.json')
+    const { center, r, st } = reporting({ stateFile: file })
+    const versions = r.reporter('6.67').versions
+    const keyCheck = { checkedAt: '2026-10-01T08:00:00Z', errorCode: null, fingerprint: apiKeyFingerprint('test-key'), httpStatus: 200, status: 'ok' }
+    const old = { reportedVersions: versions, reportedKeyStatus: 'ok', lastFailureAt: null, keyCheck }
+    writeFileSync(file, JSON.stringify(old))
+    expect(await r.run('onRequest')).toMatchObject({ event: null, sent: false })
+    expect(center.reports).toHaveLength(0)
+    expect(st.calls).toHaveLength(0)
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(old)
   })
 
   it('reports an upgrade when the Ghost version changes, but not while Ghost is unreachable', async () => {

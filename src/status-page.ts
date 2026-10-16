@@ -3,7 +3,7 @@ import type { Job } from './jobs.js'
 import { type Language, RETRANSLATE_ALL_TAG, TRANSLATE_ALL_TAG } from './languages.js'
 import { escapeHtml as e } from './segments.js'
 import { API_KEY_URL, SIGNUP_URL } from './supertext/client.js'
-import type { ApiKeyCheck } from './vendor/supertext-sdk/v1/index.js'
+import type { KeyCheck } from './vendor/supertext-plugin-health/index.js'
 import { releaseUrl } from './version.js'
 
 export type StatusPageData = {
@@ -17,7 +17,7 @@ export type StatusPageData = {
   sourceTarget?: string | null
   languages: Language[]
   /** Commando Center: the setting, the ping address and the latest API key check. */
-  reports?: { enabled: boolean; callbackUrl: string | null; check: ApiKeyCheck | null }
+  reports?: { enabled: boolean; callbackUrl: string | null; check: KeyCheck | null }
   jobs: Job[]
   viewer: string
   /** Connector version (package.json). */
@@ -43,7 +43,7 @@ const versionHtml = (v: string) => {
 const tag = (name: string) => `<code class="tag">${e(name)}</code>`
 
 /** The latest API key check in the reader's language (texts from the Commando Center's guide), with its time. */
-function keyCheckHtml(d: StatusPageData, check: ApiKeyCheck | null | undefined): string {
+function keyCheckHtml(d: StatusPageData, check: KeyCheck | null | undefined): string {
   const L = (key: MessageKey, params?: Params) => t(d.locale, key, params, e)
   if (!check) return `<span class="muted">${L('page.notCheckedYet')}</span>`
   const ok = check.status === 'ok'

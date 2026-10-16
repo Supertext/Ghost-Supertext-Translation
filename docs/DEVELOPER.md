@@ -15,7 +15,7 @@ src/
   index.ts           entry point: config, HTTP server, creates the request tags once Ghost is reachable
   config.ts          environment variables (+ optional settings file written by the demo)
   server.ts          HTTP: /supertext/webhook, /supertext/health, /supertext/ping (public), /ghost/supertext/ (status page), proxy to Ghost
-  reporting.ts       Commando Center: version reports, API key check, ping (the SDK's InstallationReporter), state in STATE_FILE
+  reporting.ts       Commando Center: version reports, API key check, ping (Plugin Health's InstallationReporter), state in STATE_FILE
   translate.ts       one source × one language: find existing translation, overwrite rules, translate, save
   collect.ts         which fields, Lexical blocks and card properties are translated
   lexical.ts         Lexical inline nodes <-> inline HTML with data-n markers
@@ -29,6 +29,7 @@ src/
   ghost/webhook.ts   signature check and payload parsing
   supertext/client.ts wrapper around the Supertext SDK: localized errors, environments, API key links
   vendor/supertext-sdk/ copy of the Supertext SDK (TypeScript sources, API in v1/; never edit, see *Supertext SDK*)
+  vendor/supertext-plugin-health/ copy of Supertext Plugin Health (TypeScript sources; never edit, see *Supertext Plugin Health*)
 demo/                 Railway demo image (Ghost 6 + connector) and its bootstrap
 test/                 Vitest suites, fakes of Ghost and Supertext; test/docs = screenshots
 ```
@@ -75,16 +76,22 @@ AI file translation API v1, same as all Supertext plugins. Every call goes throu
 3. `GET translate/ai/file/{id}/translation` → translated HTML
 4. `DELETE translate/ai/file/{id}` (best effort; files expire after 24 h)
 
-Header `Authorization: Supertext-Auth-Key <key>` (a pasted prefix is stripped). HTTP 429 is retried 4 times (`Retry-After`, else 1/2/4/8 s with jitter). The API key check (`checkApiKey()`, run by the SDK's reporter, see *Commando Center*) calls `GET features`, which costs nothing.
+Header `Authorization: Supertext-Auth-Key <key>` (a pasted prefix is stripped). HTTP 429 is retried 4 times (`Retry-After`, else 1/2/4/8 s with jitter). The API key check (the SDK's `checkApiKey()`, run by Plugin Health's reporter, see *Commando Center*) calls `GET features`, which costs nothing.
 
 ### Supertext SDK
 
-The protocol, retries, the language list, the key check, the version reports and the error codes come from the official Supertext SDK ([Supertext/Supertext-API-SDK-and-Guide](https://github.com/Supertext/Supertext-API-SDK-and-Guide), TypeScript, 0.2.1). Its sources are copied into `src/vendor/supertext-sdk/` and compiled with the connector, so sites install nothing extra; `COMMIT` and `VERSION` there name the SDK revision. Everything that talks to the API is in the `v1/` folder (`import … from './vendor/supertext-sdk/v1/index.js'`); the top-level `index.ts` only re-exports it as `v1` with `SDK_VERSION`. The vendor script copies the whole tree.
+The client (protocol, retries, the language list, the error codes) and the API key check (`checkApiKey()`, `apiKeyFingerprint`, `SDK_VERSION`) come from the official Supertext SDK ([Supertext/Supertext-API-SDK-and-Guide](https://github.com/Supertext/Supertext-API-SDK-and-Guide), TypeScript, 0.3.0); version reports and the ping are in *Supertext Plugin Health* (below). Its sources are copied into `src/vendor/supertext-sdk/` and compiled with the connector, so sites install nothing extra; `COMMIT` and `VERSION` there name the SDK revision. Everything that talks to the API is in the `v1/` folder (`import … from './vendor/supertext-sdk/v1/index.js'`); the top-level `index.ts` only re-exports it as `v1` with `SDK_VERSION`. The vendor script copies the whole tree.
 
 - Never edit `src/vendor/`. Fix the SDK in its repo, then update the copy with `scripts/vendor-sdk.sh [ref]` (default: `main`; `SDK_DIR=/path/to/clone` uses a local clone) and run the tests.
 - `src/supertext/client.ts` wraps the SDK client: it keeps the connector's options (`baseUrl`, `pollIntervalMs`, `timeoutMs`, `fetch`, `sleep`) and turns every SDK error (`SupertextError.code`, e.g. `invalid_language_pair`) into the connector's `SupertextError`, whose message is the key `error.<code>` in `src/i18n/` with parameters (API key links, HTTP status, language pair) plus the API's own detail.
 - Every SDK error code needs an `error.<code>` string in all four languages; `npm run typecheck` fails otherwise.
 - Even once the SDK is published on npm, the connector keeps bundling its copy.
+
+### Supertext Plugin Health
+
+[Supertext Plugin Health](https://github.com/Supertext/Commando-Center-Supertext-Translation/tree/main/plugin-health) (`plugin-health/typescript` in the Commando Center repository, 0.1.0) sends the version reports and the API key check result to the Supertext Commando Center and answers its reachability ping (`InstallationReporter`, `reportsEnabled()`, `reporterState()`, `pingResponse()`; see *Commando Center*). It has no dependencies and doesn't need the SDK: `src/reporting.ts` passes in the SDK's `SDK_VERSION` and a key checker built from the SDK's `checkApiKey()` and `apiKeyFingerprint`. Like the SDK, its sources are copied into `src/vendor/supertext-plugin-health/` (`import … from './vendor/supertext-plugin-health/index.js'`) and compiled with the connector; `COMMIT` and `VERSION` there name the revision.
+
+- Never edit `src/vendor/supertext-plugin-health/`. Fix it in Commando-Center-Supertext-Translation/plugin-health, then update the copy with `scripts/vendor-plugin-health.sh <tag>` (e.g. `plugin-health-v0.1.0`; default `main`; `PLUGIN_HEALTH_DIR=/path/to/clone` uses a local clone) and run the tests.
 
 ### Language codes
 
@@ -102,12 +109,12 @@ The stand-ins (`test/fakeSupertext.ts`, `test/docs/stand-in.mjs`) accept only li
 
 ### Commando Center: version reports, key check, ping
 
-Protocol: [Commando-Center-Supertext-Translation](https://github.com/Supertext/Commando-Center-Supertext-Translation) → `docs/DEVELOPER.md` → *Report protocol*; the SDK's `InstallationReporter`, `checkApiKey()` and `pingResponse()` implement it, `src/reporting.ts` only supplies what the connector knows:
+Protocol: [Commando-Center-Supertext-Translation](https://github.com/Supertext/Commando-Center-Supertext-Translation) → `docs/DEVELOPER.md` → *Report protocol*; Supertext Plugin Health's `InstallationReporter` and `pingResponse()` implement it, with the SDK's `checkApiKey()` and `apiKeyFingerprint` as the key checker (the SDK client gets `SUPERTEXT_API_URL` and the connector's User-Agent); `src/reporting.ts` only supplies what the connector knows:
 
-- **Setting:** `SUPERTEXT_VERSION_REPORTS` (default on; the SDK's `reportsEnabled()`), read in `src/config.ts` like every other setting. Off: no reports, ping 404. `SUPERTEXT_REPORT_URL` sends reports elsewhere (tests, the screenshot stand-in).
-- **Report fields:** `site_url` = `GHOST_URL`; plugin `Ghost-Supertext-Translation` (the GitHub repository name) with the version from `package.json` (`src/version.ts`); system `Ghost` with the version from the Admin API's `GET site/` (asked at most every 10 minutes; while Ghost can't be reached the last known version is used, so that isn't an "upgrade"); runtime Node.js (SDK default); `callback.url` = `callbackUrl()`: `CONNECTOR_URL` + `/supertext/ping` (setup B), else the origin of `GHOST_URL` + `/supertext/ping` in setup A (the connector answers `/supertext/…` at the root of the host it serves), else none.
+- **Setting:** `SUPERTEXT_VERSION_REPORTS` (default on; Plugin Health's `reportsEnabled()`), read in `src/config.ts` like every other setting. Off: no reports, ping 404. `SUPERTEXT_REPORT_URL` sends reports elsewhere (tests, the screenshot stand-in).
+- **Report fields:** `site_url` = `GHOST_URL`; plugin `Ghost-Supertext-Translation` (the GitHub repository name) with the version from `package.json` (`src/version.ts`); system `Ghost` with the version from the Admin API's `GET site/` (asked at most every 10 minutes; while Ghost can't be reached the last known version is used, so that isn't an "upgrade"); runtime Node.js (Plugin Health's default); `sdk_version` = the bundled SDK's `SDK_VERSION`; `callback.url` = `callbackUrl()`: `CONNECTOR_URL` + `/supertext/ping` (setup B), else the origin of `GHOST_URL` + `/supertext/ping` in setup A (the connector answers `/supertext/…` at the root of the host it serves), else none.
 - **When:** settings live in the environment, so there is no `settings_saved` and no *Test connection* button. `onRequest` runs once at startup when Ghost is reachable (after the tags are in place: a restart is how settings change), in the background on every status page view, and after every translation job (reports `installed`, `upgraded` or `api_key_check`; checks the key only when its fingerprint changed). A job that failed with `authentication_failure` runs `authenticationFailed` instead (status `invalid`, reported once). Webhooks that request nothing (every autosave) don't run it. Calls are serialized per process; background runs are tracked in `idle()`. Nothing here ever throws into a request or a translation.
-- **State:** the reporter's JSON state in `STATE_FILE` (written atomically via a temp file), kept in memory without it or when the file can't be written (`StateStore`). The fingerprint stays local; the key is never stored or logged.
+- **State:** the reporter's JSON state in `STATE_FILE` (written atomically via a temp file), kept in memory without it or when the file can't be written (`StateStore`). Plugin Health's state has the same format the SDK 0.1–0.2 reporter wrote, so the switch kept the history (no new `installed` report). The fingerprint stays local; the key is never stored or logged.
 - **Ping:** `GET /supertext/ping` is handled before the proxy, needs no login and answers exactly what `pingResponse()` returns (status, headers including `Cache-Control: no-store`, body); other methods get 405.
 - **Status page:** *API key check* (the center's message table in `keycheck.<status>`, with its time, and the account/API key links for `invalid`/`missing`), *Send version information to Supertext* (on/off, ping address, help text).
 

@@ -1,7 +1,7 @@
 import { readFileSync, statSync } from 'node:fs'
 
 import { type Language, parseLanguageMap, parsePoliteness, parseTargetLanguages } from './languages.js'
-import { reportsEnabled } from './vendor/supertext-sdk/v1/index.js'
+import { reportsEnabled } from './vendor/supertext-plugin-health/index.js'
 import { SUPERTEXT_ENVIRONMENTS } from './supertext/client.js'
 
 /**

@@ -1,8 +1,9 @@
 /**
  * Version reports to the Supertext Commando Center, the automatic API key check and the
  * callback ping (Commando-Center-Supertext-Translation → docs/DEVELOPER.md → Report protocol).
- * The protocol is the SDK's (`InstallationReporter`, `pingResponse`); this file only gives it
- * what the connector knows: the Ghost site URL, the connector and Ghost versions, the ping
+ * The protocol is Supertext Plugin Health's (`InstallationReporter`, `pingResponse`; copied
+ * into src/vendor/supertext-plugin-health), the key check the Supertext SDK's (`checkApiKey()`,
+ * `apiKeyFingerprint`). This file only gives them what the connector knows: the Ghost site URL, the connector and Ghost versions, the ping
  * address, and a place to keep the reporter's state (`STATE_FILE`, else memory).
  *
  * All settings live in the environment, so there is no "settings saved": the key check runs
@@ -14,17 +15,18 @@ import { dirname } from 'node:path'
 
 import type { Config } from './config.js'
 import {
-  type ApiKeyCheck,
-  type FetchLike,
   EMPTY_REPORTER_STATE,
   InstallationReporter,
+  type KeyCheck,
   pingResponse,
   type PingResponse,
   type ReporterOptions,
   type ReporterResult,
   reporterState,
   type ReporterState,
-} from './vendor/supertext-sdk/v1/index.js'
+} from './vendor/supertext-plugin-health/index.js'
+import { SDK_VERSION } from './vendor/supertext-sdk/index.js'
+import { apiKeyFingerprint, type FetchLike, SupertextClient } from './vendor/supertext-sdk/v1/index.js'
 import { VERSION } from './version.js'
 
 /** The GitHub repository name: the center reads the latest release from it. */
@@ -90,7 +92,7 @@ export type ReportingDeps = {
   log?: (message: string) => void
   /** HTTP for the key check against Supertext (tests, proxies); the global fetch by default. */
   fetch?: typeof fetch
-  /** Tests: options for the SDK reporter (fetch, report URL, clock, client options). */
+  /** Tests: options for Plugin Health's reporter (fetch, report URL, clock). */
   reporterOverrides?: Partial<ReporterOptions>
 }
 
@@ -123,16 +125,19 @@ export class Reporting {
   }
 
   reporter(ghostVersion: string | null): InstallationReporter {
+    const clientOptions = {
+      baseUrl: this.config.supertextApiUrl,
+      userAgent: 'ghost-supertext-translation',
+      ...(this.deps.fetch ? { fetch: this.deps.fetch as FetchLike } : {}),
+      ...(this.deps.reporterOverrides?.now ? { now: this.deps.reporterOverrides.now } : {}),
+    }
     return new InstallationReporter({
       callbackUrl: this.callbackUrl,
-      clientOptions: {
-        baseUrl: this.config.supertextApiUrl,
-        userAgent: 'ghost-supertext-translation',
-        ...(this.deps.fetch ? { fetch: this.deps.fetch as FetchLike } : {}),
-      },
       enabled: this.enabled,
+      keyChecker: { check: (apiKey) => new SupertextClient(apiKey, clientOptions).checkApiKey(), fingerprint: apiKeyFingerprint },
       plugin: { name: PLUGIN_NAME, version: VERSION },
       siteUrl: this.config.siteUrl,
+      sdkVersion: SDK_VERSION,
       system: { name: 'Ghost', version: ghostVersion },
       ...this.deps.reporterOverrides,
     })
@@ -170,7 +175,7 @@ export class Reporting {
   }
 
   /** The latest stored key check (status page). */
-  lastCheck(): ApiKeyCheck | null {
+  lastCheck(): KeyCheck | null {
     try {
       return this.store.load().keyCheck
     } catch {
