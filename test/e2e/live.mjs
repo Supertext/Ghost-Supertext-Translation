@@ -184,6 +184,14 @@ for (const t of targets) check(`${t.code}: request tags shown`, t.tags.length ==
 const [source] = await postsWhere(`slug:${SAMPLE_SLUG}`)
 if (!check('sample post exists', Boolean(source))) throw new Error(failures.join('\n'))
 check('fresh demo (nothing translated yet)', (await postsWhere(`tag:[${targets.map((t) => t.tags[2].replace('#', 'hash-')).join(',')}]`)).length === 0)
+// The connector creates the request tags once Ghost is up; the tag picker caches its first search.
+for (let i = 0; i < 120; i++) {
+  const slugs = targets.map((t) => t.tags[0].replace('#', 'hash-'))
+  const tags = (await adminApi(`tags/?filter=${encodeURIComponent(`slug:[${slugs.join(',')}]`)}&limit=all`)).tags ?? []
+  if (tags.length === slugs.length) break
+  if (i === 119) check('connector created the request tags', false, `${tags.length}/${slugs.length}`)
+  await page.waitForTimeout(1000)
+}
 const sourceBlocks = await blocks(source.html)
 console.log(`Sample post: ${sourceBlocks.length} text blocks, status ${source.status}`)
 

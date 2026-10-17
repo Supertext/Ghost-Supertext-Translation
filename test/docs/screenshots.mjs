@@ -120,8 +120,20 @@ async function setRequestTag(page, tag, add) {
   await page.waitForTimeout(2500)
 }
 
+/** The connector creates the request tags once Ghost is up; the tag picker caches its first search. */
+async function waitForTags(page, timeout = 120000) {
+  const end = Date.now() + timeout
+  while (Date.now() < end) {
+    const tags = (await adminApi(page, `tags/?filter=${encodeURIComponent("slug:hash-translate-de-ch")}`)).tags ?? []
+    if (tags.length) return
+    await page.waitForTimeout(1000)
+  }
+  throw new Error('The connector did not create the request tags')
+}
+
 // --- User guide (editor account) ---------------------------------------------------------
 const editor = await session(EDITOR)
+await waitForTags(editor)
 await openPost(editor, SOURCE_TITLE)
 await editor.click(SETTINGS)
 await editor.click(TAGS_INPUT)
