@@ -96,18 +96,29 @@ async function statusPage() {
   }))
 }
 
-/** Adds (or removes) a request tag in the post settings; Ghost saves tag changes right away. */
-async function setTag(tag, add) {
-  if (!(await page.locator('#tag-input').isVisible())) await page.click('[data-test-psm-trigger]')
+// Ghost Admin's editor (React since Ghost 6.7x): post settings and the tag picker by test id.
+const SETTINGS = '[data-testid=settings-menu-toggle]'
+const TAGS_INPUT = '[data-testid=settings-tags-input]'
+const exact = (text) => new RegExp(`^\\s*${text.replace(/[-#]/g, '\\$&')}\\s*$`)
+
+/** Adds (or removes) a request tag in the post settings and waits until Ghost saved it. */
+async function setTag(postId, tag, add) {
+  if (!(await page.locator(TAGS_INPUT).isVisible())) await page.click(SETTINGS)
   if (add) {
-    await page.click('#tag-input input')
+    await page.click(TAGS_INPUT)
     await page.keyboard.type(tag)
-    await page.locator('.ember-power-select-option').filter({ hasText: new RegExp(`^\\s*${tag.replace(/[-#]/g, '\\$&')}\\s*$`) }).first().click()
+    await page.locator('[data-testid=settings-tags-list] [role=option]').filter({ hasText: exact(tag) }).first().click()
   } else {
-    await page.locator('#tag-input li', { hasText: tag }).locator('.ember-power-select-multiple-remove-btn').click()
+    await page.locator(`[data-testid=settings-tags-token][aria-label="Remove ${tag}"]`).click()
   }
   await page.keyboard.press('Escape')
-  await page.waitForTimeout(2500)
+  const end = Date.now() + 20_000
+  while (Date.now() < end) {
+    await page.waitForTimeout(1000)
+    const [post] = await postsWhere(`id:${postId}`)
+    if ((post?.tags ?? []).some((t) => t.name === tag) === add) return
+  }
+  check(`Ghost saved the tag change (${add ? 'added' : 'removed'} ${tag})`, false, 'not saved within 20 s')
 }
 
 /** Waits until the status page shows `n` new finished jobs (newest first). */
@@ -132,13 +143,21 @@ async function waitForJobs(before, n, label) {
 
 async function openSource(id) {
   await page.goto(`${B}/ghost/#/editor/post/${id}`)
-  await page.waitForSelector('[data-test-psm-trigger]')
+  await page.waitForSelector(SETTINGS)
 }
 
 async function noGhostErrors(label) {
   const errors = await page.getByText(/Saving failed|Someone else is editing|Validation failed/i).allTextContents()
   check(`${label}: no error in Ghost Admin`, errors.length === 0, errors.join(' | '))
 }
+
+// On an unexpected error, keep what the browser showed for the e2e-debug artifact.
+process.on('uncaughtException', async (err) => {
+  console.error(err)
+  await page.screenshot({ fullPage: true, path: `${artifacts}error.png` }).catch(() => {})
+  await import('node:fs').then((fs) => page.content().then((html) => fs.writeFileSync(`${artifacts}error.html`, html))).catch(() => {})
+  process.exit(1)
+})
 
 // --- Log in as the editor ----------------------------------------------------------------
 await page.goto(`${B}/ghost/`)
@@ -170,7 +189,7 @@ console.log(`Sample post: ${sourceBlocks.length} text blocks, status ${source.st
 
 // --- First request -----------------------------------------------------------------------
 await openSource(source.id)
-for (const t of targets) await setTag(t.tags[0], true)
+for (const t of targets) await setTag(source.id, t.tags[0], true)
 await noGhostErrors('first-run')
 const firstJobs = await waitForJobs(initial.jobs.length, targets.length, 'first-run')
 
@@ -234,8 +253,8 @@ for (const t of targets) {
 // --- Requesting again updates the drafts in place ----------------------------------------
 const afterFirst = await statusPage()
 await openSource(source.id)
-for (const t of targets) await setTag(t.tags[0], false)
-for (const t of targets) await setTag(t.tags[0], true)
+for (const t of targets) await setTag(source.id, t.tags[0], false)
+for (const t of targets) await setTag(source.id, t.tags[0], true)
 await noGhostErrors('second-run')
 const secondJobs = await waitForJobs(afterFirst.jobs.length, targets.length, 'second-run')
 for (const t of targets) {

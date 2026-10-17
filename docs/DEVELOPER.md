@@ -127,6 +127,7 @@ Protocol: [Commando-Center-Supertext-Translation](https://github.com/Supertext/C
 - Staff can only be created by invite, and an invite is only accepted (`status: sent`) if its mail went out.
 - The session cookie has path `/ghost`.
 - Admin API supports `field:~'substring'` filters, used for the marker.
+- Ghost 6.71's post editor is a React screen: the screenshot script and the E2E test find the post settings and the tag picker by `data-testid` (`settings-menu-toggle`, `settings-tags-input`, `settings-tags-list`, `settings-tags-token`), no longer by the Ember selectors of earlier 6.x versions.
 
 ## Local setup
 

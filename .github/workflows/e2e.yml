@@ -172,6 +172,7 @@ jobs:
           mkdir -p e2e-debug
           cp -r test/e2e/artifacts e2e-debug/ 2>/dev/null || true
           cp test/docs/stand-in.log e2e-debug/ 2>/dev/null || true
+          cp test/docs/error-*.png e2e-debug/ 2>/dev/null || true
           for c in demo-live demo-docs; do docker logs "$c" > "e2e-debug/$c.log" 2>&1 || true; done
 
       - name: Upload logs for debugging
