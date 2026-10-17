@@ -187,7 +187,7 @@ describe('status page', () => {
     renderStatusPage({
       ghost: { detail: '', ok: true },
       jobs: [],
-      languages: parseTargetLanguages('de,de-CH,en-US', { 'en-us': 'more' }),
+      languages: parseTargetLanguages('de-LI,de-CH,en-US', { 'en-us': 'more' }),
       locale,
       reports,
       siteTitle: 'Demo',
@@ -219,7 +219,7 @@ describe('status page', () => {
 
   it('marks unmapped languages and a tone the target lacks', () => {
     const html = page(undefined)
-    expect(html).toContain('German <span class="bad">Not mapped: add it to SUPERTEXT_LANGUAGE_MAP</span>')
+    expect(html).toContain('German (Liechtenstein) <span class="bad">No Supertext language: choose one under Language mapping</span>')
     expect(html).toContain('Supertext offers no formal/informal choice for this language: remove it from SUPERTEXT_POLITENESS')
   })
 })

@@ -18,8 +18,23 @@ describe('language codes (no guessing)', () => {
     expect(targetCode('es')).toBe('es')
     expect(targetCode('SL')).toBe('sl')
   })
-  it('gives no default region: anything else is unsupported_language', () => {
-    for (const code of ['de', 'en', 'zh-CN', 'es-ES', 'sl-SI', 'xx']) {
+  it("uses the SDK's default only where it is obvious", () => {
+    expect(['de', 'en', 'fr', 'it', 'pt', 'zh', 'sr', 'zh-TW', 'zh-CN', 'es-ES', 'sl-SI'].map((c) => targetCode(c))).toEqual([
+      'de-DE',
+      'en-US',
+      'fr-FR',
+      'it-IT',
+      'pt-PT',
+      'zh-Hans',
+      'sr-Latn',
+      'zh-Hant',
+      'zh-Hans',
+      'es',
+      'sl',
+    ])
+  })
+  it('guesses nothing else: unsupported_language', () => {
+    for (const code of ['de-LI', 'en-IE', 'gsw', 'sr-RS', 'xx']) {
       expect(() => targetCode(code)).toThrow(expect.objectContaining({ code: 'unsupported_language' }))
       expect(targetCodeOrNull(code)).toBeNull()
     }
@@ -38,9 +53,10 @@ describe('language codes (no guessing)', () => {
     expect([fr?.code, fr?.target, fr?.langTag]).toEqual(['fr_ch', 'fr-CH', '#lang-fr-ch'])
     expect(nl?.target).toBe('nl')
   })
-  it('marks an unmapped language instead of guessing', () => {
-    const [de] = parseTargetLanguages('de')
-    expect(de).toMatchObject({ code: 'de', target: null, translateTag: '#translate-de' })
+  it('marks a language without mapping or default instead of guessing', () => {
+    const [de, li] = parseTargetLanguages('de, de-LI')
+    expect(de).toMatchObject({ code: 'de', target: 'de-DE', translateTag: '#translate-de' })
+    expect(li).toMatchObject({ code: 'de-LI', target: null, translateTag: '#translate-de-li' })
   })
 })
 

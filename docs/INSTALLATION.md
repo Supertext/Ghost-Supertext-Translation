@@ -101,12 +101,38 @@ Each language needs a Supertext language. Supertext accepts exactly these target
 | Swiss German | `gsw-u-sd-chzh` (Zurich), `gsw-u-sd-chbe` (Bern) |
 | All others, without region | `bg`, `cs`, `da`, `el`, `es`, `fi`, `hr`, `hu`, `ja`, `ko`, `nb`, `nl`, `pl`, `rm`, `ru`, `sk`, `sl`, `sq`, `sv`, `tr` |
 
-- A code in `TARGET_LANGUAGES` that **is** one of these codes (apart from upper/lower case and `_`/`-`) is sent as it is: `de-CH`, `fr_ch`, `es`. The source language is sent without region (`en-GB` → `en`).
-- **Every other code needs an entry in `SUPERTEXT_LANGUAGE_MAP`**: `code=Supertext code`, separated by commas, e.g. `SUPERTEXT_LANGUAGE_MAP=de=de-CH,zh=zh-Hans` (JSON such as `{"de":"de-CH"}` works too). The tags keep your code (`#translate-de`), Supertext gets the mapped one. The same mapping applies to `SOURCE_LANGUAGE` (sent in its source form: `en=en-US` → `en`).
-- The connector never guesses a region: an unmapped language is reported as *has no Supertext language yet* and nothing is sent for it. The startup log names unmapped languages, and the status page marks them **Not mapped**.
-- Formal/informal (`SUPERTEXT_POLITENESS`) isn't offered for English, Swiss German, Romansh, Albanian and Serbian. Set for one of these languages (`en-US=more`), its translations fail with *Supertext offers no formal or informal tone for this language* until you remove the entry; set for all languages (`more`), these languages are translated with the default tone. The status page shows both cases.
+Which Supertext language each of your languages is sent as is decided in this order:
 
-Existing sites: until this version, a bare code like `de` was sent as `de-DE` automatically. Add `SUPERTEXT_LANGUAGE_MAP=de=de-DE` (or `de-CH`, `de-AT`) to keep translating it; the tags don't change.
+1. **The mapping**: `SUPERTEXT_LANGUAGE_MAP` if it names the language, else the choice on the status page (*Language mapping*, see below).
+2. Else a code that **is** one of the codes above (apart from upper/lower case and `_`/`-`) is sent as it is: `de-CH`, `fr_ch`, `es`.
+3. Else the **default**, only where it is obvious:
+
+   | Your code | Sent as |
+   | --- | --- |
+   | `de`, `en`, `fr`, `it`, `pt` | `de-DE`, `en-US`, `fr-FR`, `it-IT`, `pt-PT` |
+   | `zh`, `zh-CN`, `zh-SG` | `zh-Hans` |
+   | `zh-TW`, `zh-HK`, `zh-MO` | `zh-Hant` |
+   | `sr` | `sr-Latn` |
+   | a region of a language Supertext offers without region (`es-ES`, `nl-BE`, `sl-SI`) | the language without region (`es`, `nl`, `sl`) |
+
+4. Else nothing is guessed: the language has **no Supertext language yet** and nothing is sent for it (for example `de-LI`, `en-IE`, `gsw`, `sr-RS`). The startup log names these languages, and the status page marks them **No Supertext language**.
+
+The tags always keep your code (`#translate-de`); Supertext gets the mapped one. The same mapping applies to `SOURCE_LANGUAGE`, which is sent without region (`en` mapped to `en-GB` → `en`).
+
+#### Language mapping on the status page
+
+The status page at `/ghost/supertext/` ([setup A](#a-in-front-of-ghost)) has a **Language mapping** section with one drop-down list per language, the source language first. Each list offers Supertext's target languages as *Name (code)*, in the page's language. It shows the saved choice, else the default from the table above, else *— choose —*. Choose a language and click **Save**; only Supertext's own codes are accepted. Changes apply right away, without a restart.
+
+![The languages and Language mapping sections of the status page: one drop-down list per language, with the suggested Supertext language preselected](images/status-mapping.png)
+
+- Every signed-in staff user sees the section; only Ghost **Owners and Administrators** can save it.
+- The choices are kept in `supertext-settings.json` next to `STATE_FILE` (or in `SUPERTEXT_SETTINGS_FILE`). Without either, they are kept in memory until the next restart, and the section says so.
+- `SUPERTEXT_LANGUAGE_MAP` stays available for automated setups and **wins**: a language it names is shown read-only with *Set by SUPERTEXT_LANGUAGE_MAP*. Format: `code=Supertext code`, separated by commas, e.g. `SUPERTEXT_LANGUAGE_MAP=de-LI=de-CH,zh=zh-Hant` (JSON such as `{"de":"de-CH"}` works too).
+- Setup B (standalone) has no status page: there, use `SUPERTEXT_LANGUAGE_MAP` for every language that needs a different code than its default.
+
+Formal/informal (`SUPERTEXT_POLITENESS`) isn't offered for English, Swiss German, Romansh, Albanian and Serbian. Set for one of these languages (`en-US=more`), its translations fail with *Supertext offers no formal or informal tone for this language* until you remove the entry; set for all languages (`more`), these languages are translated with the default tone. The status page shows both cases.
+
+Existing sites: an existing `SUPERTEXT_LANGUAGE_MAP` keeps working unchanged (and still wins over the status page). A bare `de`, `fr` or `en` that wasn't mapped is now sent as `de-DE`, `fr-FR`, `en-US` instead of failing; choose another variant on the status page if you prefer.
 
 For each target language the connector creates three internal tags on startup (`de-CH` shown):
 
@@ -120,9 +146,9 @@ plus `#translate-all` and `#retranslate-all`. You find them under **Tags → Int
 
 ![Ghost's internal tags list with the Supertext request and language tags](images/tags.png)
 
-The status page shows the same configuration:
+The status page's **Connection** section shows the rest of the configuration:
 
-![The languages and connection sections of the Supertext status page, with the connector version](images/status-settings.png)
+![The connection section of the Supertext status page: Ghost, API key check, Supertext endpoint and the connector version](images/status-settings.png)
 
 Its **Connection** section also shows the **Connector version** (from the connector's `package.json`). Ghost has no plugin list, so this is where you check which version you run, for example before and after an update; a release version links to its release notes on GitHub. The startup log shows it too (`[supertext] Connector 0.1.0 listening on …`).
 
@@ -168,8 +194,9 @@ Ghost's **Publication language** (Settings → General) is one value for the who
 | `SUPERTEXT_API_KEY` | — | Your Supertext API key, generated at [supertext.com → Integrations → API](https://www.supertext.com/en/integrations/api) (Admin role). |
 | `SUPERTEXT_API_URL` | `https://api.supertext.com/v1/` | Supertext API endpoint. |
 | `SOURCE_LANGUAGE` | `en` | Language of the originals. Sent to Supertext without region (`en-GB` → `en`). |
-| `TARGET_LANGUAGES` | `de-CH,fr-CH` | Target languages, comma-separated. Each must be a Supertext code or mapped in `SUPERTEXT_LANGUAGE_MAP` (see [Language setup](#language-setup)). |
-| `SUPERTEXT_LANGUAGE_MAP` | — | Your code → Supertext code, e.g. `de=de-CH,zh=zh-Hans` (or JSON `{"de":"de-CH"}`). Needed for every code that isn't itself a Supertext code; there are no default regions. |
+| `TARGET_LANGUAGES` | `de-CH,fr-CH` | Target languages, comma-separated. Each is a Supertext code, has a default (`de` → `de-DE`) or is mapped on the status page or in `SUPERTEXT_LANGUAGE_MAP` (see [Language setup](#language-setup)). |
+| `SUPERTEXT_LANGUAGE_MAP` | — | Optional override of the status page's *Language mapping*: your code → Supertext code, e.g. `de=de-CH,zh=zh-Hant` (or JSON `{"de":"de-CH"}`). The languages it names can't be changed on the status page. Needed in setup B for codes without a default. |
+| `SUPERTEXT_SETTINGS_FILE` | `supertext-settings.json` next to `STATE_FILE` | JSON file for the language mapping chosen on the status page. Without it and without `STATE_FILE` the mapping is kept in memory only. |
 | `SUPERTEXT_POLITENESS` | `default` | Formal or informal address: `more` (formal, e.g. *Sie*/*vous*), `less` or `default`, for all languages, or per language: `de-CH=more,fr-CH=less`. |
 | `PORT` / `HOST` | `8080` / `0.0.0.0` | Where the connector listens. |
 | `JOBS_FILE` | — | JSON file to keep the status page's history across restarts. |
@@ -178,7 +205,7 @@ Ghost's **Publication language** (Settings → General) is one value for the who
 | `STATE_FILE` | — | JSON file for what was last reported to Supertext and the latest API key check. Without it this is kept in memory, so after each restart the key is checked again and the installation is reported as new. |
 | `UI_LANGUAGE` | `auto` | Language of the status page and of the tag descriptions: `en`, `de`, `fr`, `it`, or `auto` (see *Interface languages*). |
 
-Changing `TARGET_LANGUAGES` or `SUPERTEXT_LANGUAGE_MAP` needs a restart.
+Changing `TARGET_LANGUAGES` or `SUPERTEXT_LANGUAGE_MAP` needs a restart; the status page's *Language mapping* applies right away.
 
 ### Version information and the API key check
 
@@ -220,8 +247,10 @@ Translations stay normal Ghost posts. Each carries an invisible HTML comment in 
 | Status page sends you to the Ghost sign-in | You're not signed in to Ghost Admin in this browser, or the page isn't served under `/ghost/supertext/` on the site's own host. |
 | Status page: "only available when the connector runs in front of Ghost" | Setup B; use the connector log instead. |
 | "Authentication failure. Please check your Supertext API key. …" | Wrong or expired `SUPERTEXT_API_KEY`. Generate a new one at [supertext.com → Integrations → API](https://www.supertext.com/en/integrations/api) (Admin role). |
-| "Supertext does not support this language pair (en → xx-YY)" | A mapped code Supertext doesn't offer (e.g. `es-ES` instead of `es`, or the same language as the source); fix the `SUPERTEXT_LANGUAGE_MAP` entry. The message shows the codes that were sent. |
-| "The language … has no Supertext language yet" / **Not mapped** on the status page | The code in `TARGET_LANGUAGES` or `SOURCE_LANGUAGE` isn't a Supertext code: add it to `SUPERTEXT_LANGUAGE_MAP` (see [Language setup](#language-setup)) and restart. |
+| "Supertext does not support this language pair (en → xx-YY)" | A code in `SUPERTEXT_LANGUAGE_MAP` Supertext doesn't offer (e.g. `es-ES` instead of `es`), or the target is the same language as the source; fix the entry, or remove it and choose the language under *Language mapping* on the status page. The message shows the codes that were sent. |
+| "The language … has no Supertext language yet" / **No Supertext language** on the status page | The code in `TARGET_LANGUAGES` or `SOURCE_LANGUAGE` is no Supertext code and has no default (e.g. `de-LI`, `gsw`): choose its Supertext language under *Language mapping* on the status page (Ghost Owner or Administrator), or add it to `SUPERTEXT_LANGUAGE_MAP` and restart (see [Language setup](#language-setup)). |
+| *Language mapping*: "Kept in memory only" or "only until the next restart" | Neither `STATE_FILE` nor `SUPERTEXT_SETTINGS_FILE` is set, or the file can't be written: set one to a writable path (the demo uses its volume). |
+| *Language mapping*: "The form has expired" | The page was open across a restart of the connector or you signed in again: reload the status page and save again. |
 | "Supertext offers no formal or informal tone for this language" | `SUPERTEXT_POLITENESS` sets `more`/`less` for a language without it (English, Swiss German, Romansh, Albanian, Serbian); remove that entry and restart. |
 | "Supertext rejected the API key" on the status page | The key is wrong or revoked. Check that the whole key is in `SUPERTEXT_API_KEY`, or generate a new one at [supertext.com → Integrations → API](https://www.supertext.com/en/integrations/api) (Admin role). No Supertext account yet? [Create one](https://www.supertext.com/person/en/account/signin). Restart the connector; it checks the new key. |
 | "The API key couldn't be checked because Supertext can't be reached" | The connector can't reach `api.supertext.com` (firewall, proxy, DNS). Translations need the same connection. |

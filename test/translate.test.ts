@@ -134,10 +134,12 @@ describe('Translator', () => {
 
   it('sends nothing for a language without a Supertext code', async () => {
     const { source, st, translator } = setup()
-    const [unmapped] = parseTargetLanguages('de')
+    const [unmapped] = parseTargetLanguages('de-LI')
     const result = await translator.translate('posts', source.id, unmapped!, false)
     expect(result).toMatchObject({ errorCode: 'unsupported_language', status: 'failed' })
-    expect(result.message).toBe('The language German (de) has no Supertext language yet. Ask your administrator to map it (SUPERTEXT_LANGUAGE_MAP, e.g. de=de-CH).')
+    expect(result.message).toBe(
+      'The language German (Liechtenstein) (de-LI) has no Supertext language yet. Ask your administrator to choose one on the Supertext status page (Ghost Admin → /ghost/supertext/ → Language mapping).',
+    )
     expect(st.calls).toHaveLength(0)
   })
 

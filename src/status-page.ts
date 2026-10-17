@@ -2,10 +2,12 @@ import { format, languageLabel, type MessageKey, type Params, t, type UiLocale }
 import type { Job } from './jobs.js'
 import { type Language, RETRANSLATE_ALL_TAG, TRANSLATE_ALL_TAG } from './languages.js'
 import { escapeHtml as e } from './segments.js'
+import { fieldName, type MappingRow } from './settings.js'
 import { API_KEY_URL, SIGNUP_URL } from './supertext/client.js'
 import type { KeyCheck } from './vendor/supertext-plugin-health/index.js'
 import { fontFaces, staticUrl } from './static.js'
 import { releaseUrl } from './version.js'
+import { Languages } from './vendor/supertext-sdk/v1/index.js'
 
 export type StatusPageData = {
   siteUrl: string
@@ -20,6 +22,18 @@ export type StatusPageData = {
   /** Commando Center: the setting, the ping address and the latest API key check. */
   reports?: { enabled: boolean; callbackUrl: string | null; check: KeyCheck | null }
   jobs: Job[]
+  /** The language mapping form (one combo box per language); absent outside proxy mode. */
+  mapping?: {
+    rows: MappingRow[]
+    /** Ghost Owner or Administrator: may save. Others see the choices read-only. */
+    canEdit: boolean
+    csrf: string
+    formAction: string
+    /** Saved to a file (false: kept in memory until the next restart). */
+    persistent: boolean
+    /** Just saved: to the file, or only in memory. */
+    saved: 'saved' | 'memory' | null
+  }
   viewer: string
   /** Connector version (package.json). */
   version: string
@@ -51,6 +65,42 @@ function keyCheckHtml(d: StatusPageData, check: KeyCheck | null | undefined): st
   const text = L(`keycheck.${check.status}` as MessageKey, { status: check.httpStatus ?? '' })
   const links = check.status === 'invalid' || check.status === 'missing' ? `<br><span class="muted">${L('page.keyHelp', { apiKeyUrl: API_KEY_URL, signupUrl: SIGNUP_URL })}</span>` : ''
   return `<span class="${ok ? 'ok' : 'bad'}">${text}</span> <span class="muted">${L('page.checkedAt', { time: time(check.checkedAt) })}</span>${links}`
+}
+
+/** One combo box per language: Supertext's targets, "Name (code)" in the reader's language. */
+function mappingHtml(d: StatusPageData, m: NonNullable<StatusPageData['mapping']>): string {
+  const L = (key: MessageKey, params?: Params) => t(d.locale, key, params, e)
+  const options = Languages.targetOptions()
+    .map((o) => ({ code: o.code, label: `${languageLabel(o.code, d.locale)} (${o.code})` }))
+    .sort((a, b) => a.label.localeCompare(b.label, d.locale))
+  const row = (r: MappingRow) => {
+    const id = `map-${r.code.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+    const known = options.some((o) => o.code === r.selected)
+    const choose = r.selected === '' || !known ? `<option value=""${r.selected === '' ? ' selected' : ''}>${L('page.mappingChoose')}</option>` : ''
+    const unknown = r.selected !== '' && !known ? `<option value="${e(r.selected)}" selected>${e(r.selected)}</option>` : ''
+    const opts = options.map((o) => `<option value="${e(o.code)}"${o.code === r.selected ? ' selected' : ''}>${e(o.label)}</option>`).join('')
+    const disabled = r.overridden || !m.canEdit ? ' disabled' : ''
+    const note = r.overridden
+      ? `<span class="muted">${L('page.mappingOverridden')}</span>`
+      : r.selected === ''
+        ? `<span class="bad">${L('page.mappingNone')}</span>`
+        : ''
+    return `<tr><td><label for="${id}">${e(languageLabel(r.code, d.locale))}</label> ${tag(r.code)}<br><span class="muted">${L(r.role === 'source' ? 'page.mappingSource' : 'page.mappingTarget')}</span></td><td><select id="${id}" name="${e(fieldName(r.code))}"${disabled}>${choose}${unknown}${opts}</select>${note ? `<br>${note}` : ''}</td></tr>`
+  }
+  const saved = m.saved === 'saved' ? `<p class="ok" role="status">${L('page.mappingSaved')}</p>` : m.saved === 'memory' ? `<p class="bad" role="status">${L('page.mappingMemory')}</p>` : ''
+  return `<section id="mapping">
+  <h2>${L('page.mappingTitle')}</h2>
+  ${saved}
+  <p>${L('page.mappingIntro')}</p>
+  ${m.persistent ? '' : `<p class="muted">${L('page.mappingNotPersistent')}</p>`}
+  <form method="post" action="${e(m.formAction)}">
+  <input type="hidden" name="csrf" value="${e(m.csrf)}">
+  <div class="table-scroll"><table class="mapping"><thead><tr><th>${L('page.mappingColLanguage')}</th><th>${L('page.mappingColSupertext')}</th></tr></thead><tbody>
+${m.rows.map(row).join('\n')}
+  </tbody></table></div>
+  ${m.canEdit ? `<p><button type="submit">${L('page.mappingSave')}</button></p>` : `<p class="muted">${L('page.mappingAdminOnly')}</p>`}
+  </form>
+</section>`
 }
 
 /** The staff-only page at /supertext/: how to translate, recent results, configuration. */
@@ -111,6 +161,12 @@ header .site{color:rgba(255,255,255,.72);font-weight:400}
 header .spacer{flex:1}
 header a.back{display:inline-flex;align-items:center;min-height:40px;padding:7px 18px;border:1px solid rgba(255,255,255,.6);border-radius:999px;color:#fff;font-weight:500;text-decoration:none;white-space:nowrap}
 header a.back:hover{background:rgba(255,255,255,.12);border-color:#fff}
+select{font:inherit;color:var(--text);background:var(--card);border:1px solid #b9c0be;border-radius:10px;padding:7px 10px;min-height:40px;max-width:100%;width:22rem}
+select:disabled{background:var(--bg);color:var(--muted)}
+select:focus-visible,button:focus-visible{outline:3px solid var(--mint);outline-offset:2px}
+button{font:inherit;font-weight:600;color:var(--text);background:var(--mint);border:0;border-radius:999px;padding:9px 22px;min-height:40px;cursor:pointer}
+button:hover{background:var(--mint-hover)}
+table.mapping td{vertical-align:middle}
 a:focus-visible{outline:3px solid var(--mint);outline-offset:2px;border-radius:4px}
 header a.back:focus-visible{border-radius:999px}
 main{max-width:1060px;margin:0 auto;padding:28px 32px 48px;display:grid;gap:20px}
@@ -171,6 +227,7 @@ ${rows}
 ${langRows}
   </tbody></table></div>
 </section>
+${d.mapping ? mappingHtml(d, d.mapping) : ''}
 <section id="settings">
   <h2>${L('page.connectionTitle')}</h2>
   <dl>

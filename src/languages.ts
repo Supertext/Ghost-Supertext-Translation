@@ -12,8 +12,9 @@ export type Language = {
   /** Code as configured, e.g. `de-CH` or `de`. Used in markers, logs and messages. */
   code: string
   /**
-   * Code sent to Supertext as target (`SUPERTEXT_LANGUAGE_MAP`, else an exact Supertext code),
-   * or null when the language isn't mapped: requests for it fail with `unsupported_language`.
+   * Code sent to Supertext as target (the mapping: `SUPERTEXT_LANGUAGE_MAP`, else the status
+   * page's combo box; else an exact Supertext code; else the SDK default, `de` → `de-DE`), or
+   * null when there is none of these: requests for it fail with `unsupported_language`.
    */
   target: string | null
   /** Lower-case code used in tag names and URLs, e.g. `de-ch`. */
@@ -28,6 +29,8 @@ export type Language = {
    * `ignored` = set for all languages, this one is sent with the default tone. Shown on the status page.
    */
   politenessUnsupported: 'blocked' | 'ignored' | null
+  /** Where the tone comes from: set for this language, for all languages, or not set. */
+  politenessScope: 'language' | 'all' | null
   /** `#lang-de-ch`: marks a translation. */
   langTag: string
   /** `#translate-de-ch`: request a translation. */
@@ -56,23 +59,39 @@ export function parseTargetLanguages(value: string, politeness: Record<string, P
     const slug = languageSlug(code)
     if (seen.has(slug)) continue
     seen.add(slug)
-    const target = targetCodeOrNull(code, mapping)
     const own = politeness[slug]
     const tone = own ?? politeness['*'] ?? 'default'
-    const unsupported = tone !== 'default' && target !== null && Languages.supportsPoliteness(target) === false
-    out.push({
-      code,
-      target,
-      label: languageLabel(code),
-      langTag: `#lang-${slug}`,
-      politeness: tone,
-      politenessUnsupported: unsupported ? (own ? 'blocked' : 'ignored') : null,
-      retranslateTag: `#retranslate-${slug}`,
-      slug,
-      translateTag: `#translate-${slug}`,
-    })
+    const scope = tone === 'default' ? null : own ? 'language' : 'all'
+    out.push(
+      withTarget(
+        {
+          code,
+          label: languageLabel(code),
+          langTag: `#lang-${slug}`,
+          politeness: tone,
+          politenessScope: scope,
+          politenessUnsupported: null,
+          retranslateTag: `#retranslate-${slug}`,
+          slug,
+          target: null,
+          translateTag: `#translate-${slug}`,
+        },
+        mapping,
+      ),
+    )
   }
   return out
+}
+
+function withTarget(language: Language, mapping: LanguageMapping): Language {
+  const target = targetCodeOrNull(language.code, mapping)
+  const unsupported = language.politenessScope !== null && target !== null && Languages.supportsPoliteness(target) === false
+  return { ...language, politenessUnsupported: unsupported ? (language.politenessScope === 'language' ? 'blocked' : 'ignored') : null, target }
+}
+
+/** The same languages with their Supertext codes worked out again for `mapping` (after the mapping was saved). */
+export function remapLanguages(languages: Language[], mapping: LanguageMapping): Language[] {
+  return languages.map((l) => withTarget(l, mapping))
 }
 
 /** `more` (all languages) or `de-CH=more,fr-CH=less` → map keyed by language slug (`*` = all). */
@@ -112,14 +131,15 @@ export function parseLanguageMap(value: string | undefined): Record<string, stri
 }
 
 /**
- * Language codes come from the Supertext SDK (`Languages`), so every plugin uses the same rules
- * and nothing is guessed: the mapping wins, else a code that equals a Supertext code apart from
- * case and `_`/`-` (`de-CH`, `fr_ch` → `fr-CH`, `es`), else `SupertextError('unsupported_language')`.
- * There are no default regions: `de` must be mapped (`de=de-CH`).
+ * Language codes come from the Supertext SDK (`Languages`), so every plugin uses the same rules:
+ * the mapping wins, else a code that equals a Supertext code apart from case and `_`/`-`
+ * (`de-CH`, `fr_ch` → `fr-CH`, `es`), else the SDK's default where one is obvious (`de` → `de-DE`,
+ * `zh-TW` → `zh-Hant`, `es-ES` → `es`), else `SupertextError('unsupported_language')`.
+ * Nothing else is guessed: `de-LI`, `en-IE`, `gsw` need a mapping.
  */
 export const targetCode = (code: string, mapping: LanguageMapping = {}): string => Languages.target(code, mapping)
 
-/** The target code, or null when the language isn't mapped (status page, startup log). */
+/** The target code, or null when the language has no mapping, exact match or default (status page, startup log). */
 export function targetCodeOrNull(code: string, mapping: LanguageMapping = {}): string | null {
   try {
     return Languages.target(code, mapping)

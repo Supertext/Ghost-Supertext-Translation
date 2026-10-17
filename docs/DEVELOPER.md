@@ -14,13 +14,14 @@ The connector **never writes the source post**. Ghost rejects a save whose `upda
 src/
   index.ts           entry point: config, HTTP server, creates the request tags once Ghost is reachable
   config.ts          environment variables (+ optional settings file written by the demo)
-  server.ts          HTTP: /supertext/webhook, /supertext/health, /supertext/ping (public), /supertext/static/ (logo, favicon, fonts), /ghost/supertext/ (status page), proxy to Ghost
+  server.ts          HTTP: /supertext/webhook, /supertext/health, /supertext/ping (public), /supertext/static/ (logo, favicon, fonts), /ghost/supertext/ (status page), POST /ghost/supertext/settings (language mapping), proxy to Ghost
   reporting.ts       Commando Center: version reports, API key check, ping (Plugin Health's InstallationReporter), state in STATE_FILE
   translate.ts       one source × one language: find existing translation, overwrite rules, translate, save
   collect.ts         which fields, Lexical blocks and card properties are translated
   lexical.ts         Lexical inline nodes <-> inline HTML with data-n markers
   segments.ts        segment model, HTML document for Supertext, parsing the answer
-  languages.ts       target languages, Supertext codes (SUPERTEXT_LANGUAGE_MAP, no guessing), tag names, added tags → requests
+  languages.ts       target languages, Supertext codes (mapping → exact → SDK default), tag names, added tags → requests
+  settings.ts        status page settings: the language mapping (one combo box per language), its JSON file, form validation, CSRF tokens
   jobs.ts            recent requests for the status page (memory, optional JSON file)
   status-page.ts     status page HTML (inline CSS, see *Look and feel*)
   static.ts          the files of public/ served at /supertext/static/ (fixed list, cached for a year, URLs carry ?v=<version>)
@@ -103,13 +104,21 @@ The client (protocol, retries, the language list, the error codes) and the API k
 
 Supertext accepts exactly the codes its `GET features` lists (the SDK's `Languages`, from the live API): bare sources (`en`, `de`); targets in one exact form each, regional for German, English, French, Italian and Portuguese (`de-CH`, `en-US`, `pt-BR`), with a script for Chinese and Serbian (`zh-Hans`, `sr-Latn`), `gsw-u-sd-chzh`/`chbe` for Swiss German, bare for the others (`es`, `nl`, `sl`). Anything else is HTTP 404 `INVALID_LANGUAGE_PAIR`; formal/informal for a target without it (`en-US`, `rm`, …) is HTTP 400 `FEATURE_ERROR` (`unsupported_feature`).
 
-`src/languages.ts` turns the configured codes into Supertext codes with the SDK's `Languages`, **without guessing** (one mapping, `SUPERTEXT_LANGUAGE_MAP`, for targets and the source):
+`src/languages.ts` turns the configured codes into Supertext codes with the SDK's `Languages` (one mapping for targets and the source). **Defaults only where obvious:**
 
-- `targetCode(code, map)`: the mapping wins (sent as it is); else a code that equals a Supertext code apart from case and `_`/`-` (`de-CH`, `fr_ch` → `fr-CH`, `es`); else `SupertextError('unsupported_language')`. There are no default regions: `de` must be mapped. `parseTargetLanguages` stores the result in `Language.target` (`null` = not mapped); the configured code (`Language.code`) still names the tags and the translation marker, so existing sites keep their tags.
-- `sourceCode(code, map)`: the mapping in its source form (`en=en-US` → `en`), else the Supertext source for the code (`en-GB` → `en`), else `unsupported_language`.
-- `Translator.codes()` resolves both before anything is sent; an unmapped language fails that job with `error.unsupported_language` (`{language}` and `{code}`), and Supertext is never called.
+- **The mapping** is `effectiveMapping()` in `src/settings.ts`: `SUPERTEXT_LANGUAGE_MAP` (override for automated setups) wins for the languages it names, then the choices saved on the status page (*Language mapping*). It is worked out again on every request (`app.languageMap()`, `app.languages()` → `remapLanguages()`), so a save applies without a restart.
+- `targetCode(code, map)` = `Languages.target(code, map)`: the mapping wins (sent as it is); else a code that equals a Supertext code apart from case and `_`/`-` (`de-CH`, `fr_ch` → `fr-CH`, `es`); else the SDK default (`Languages.defaultTarget`: bare `de`/`en`/`fr`/`it`/`pt` → `de-DE`/`en-US`/`fr-FR`/`it-IT`/`pt-PT`, `zh`/`zh-CN`/`zh-SG` → `zh-Hans`, `zh-TW`/`zh-HK`/`zh-MO` → `zh-Hant`, `sr` → `sr-Latn`, a region of a bare target → the bare target: `es-ES` → `es`); else `SupertextError('unsupported_language')`. Nothing else is guessed (`de-LI`, `en-IE`, `gsw`, `sr-RS`). `parseTargetLanguages` stores the result in `Language.target` (`null` = none); the configured code (`Language.code`) still names the tags and the translation marker, so existing sites keep their tags.
+- `sourceCode(code, map)` = `Languages.source`: the mapping in its source form (`en=en-US` → `en`), else the Supertext source for the code (`en-GB` → `en`), else `unsupported_language`.
+- `Translator.codes()` resolves both before anything is sent; a language without a code fails that job with `error.unsupported_language` (`{language}` and `{code}`; the message points to the status page's *Language mapping*), and Supertext is never called.
 - Formal/informal: `Language.politenessUnsupported` is `blocked` when `SUPERTEXT_POLITENESS` sets a tone for that language and `Languages.supportsPoliteness(target)` is false (the job fails with `error.unsupported_feature`, nothing is sent), `ignored` when the tone comes from the all-languages value (sent with the default tone). Both are shown on the status page; `blocked` is also logged at startup.
-- The startup log and the status page show the code each language is sent as and mark unmapped languages.
+- The startup log and the status page show the code each language is sent as and mark languages with neither mapping nor default (*No Supertext language*).
+
+**The combo boxes** (`src/settings.ts`, rendered by `mappingHtml()` in `src/status-page.ts`): `mappingRows()` gives one row per configured language, `SOURCE_LANGUAGE` first, preselected with the override, else the saved value, else `Languages.suggestTarget(code)`, else `''` (*— choose —*). The options are `Languages.targetOptions()`, shown as *Name (code)* with the name from `Intl.DisplayNames` in the page's language, sorted by that name. A row set by `SUPERTEXT_LANGUAGE_MAP` is disabled (not submitted, not saved). `readMappingForm()` reads only the configured languages and refuses any value outside `targetOptions()` (400); an empty value leaves the language to its exact match or default.
+
+- **Who:** the status page needs a Ghost staff session (`users/me` with the browser's cookie, `?include=roles`); saving needs the role **Owner** or **Administrator** (403 otherwise; others see the boxes disabled).
+- **CSRF:** the form carries an HMAC of the staff session cookie (`CsrfTokens`, per-process secret, so a restart expires open forms), checked in constant time; an `Origin` other than the site's is refused. After saving, a 303 back to the page (`?saved=1`, or `memory` if the file couldn't be written).
+- **Storage:** `supertext-settings.json` next to `STATE_FILE`, or `SUPERTEXT_SETTINGS_FILE` (`{ "languageCodes": { "<code>": "<Supertext code>" } }`), written atomically via a temp file and re-read when it changes; in memory without a file. A broken file counts as empty, and nothing here throws into a request or a translation.
+- **Upgrade:** nothing to migrate: the old configuration was `SUPERTEXT_LANGUAGE_MAP` only, which keeps working and wins.
 
 The stand-ins (`test/fakeSupertext.ts`, `test/docs/stand-in.mjs`) accept only listed codes and reject regional sources like the real API; `fakeSupertext.ts` also answers `FEATURE_ERROR` for a tone the target lacks.
 
@@ -150,7 +159,8 @@ GHOST_URL=… GHOST_ADMIN_API_KEY=… npm start
 - `test/webhook.test.ts`: signatures, payload parsing, tag → request mapping, Admin API JWT.
 - `test/translate.test.ts`: the translator and the webhook server against `fakeGhost.ts` (mirrors Ghost's tag slugs, `~` filter and update-collision check) and `fakeSupertext.ts`: create, update in place, kept when edited/published, forced overwrite, one translation per language, skip translations, errors, unmapped languages and unsupported tones (nothing sent), the public ping route (200/400/405, 404 with reports off), and the reports after a translation (`installed`; a rejected key as `invalid`) to a fake center.
 - `test/client.test.ts`: the SDK wrapper: protocol, status and HTTP error mapping, API key prefix, rate limiting, language-pair errors. `fakeSupertext.ts` reads the SDK's multipart body back as `FormData`.
-- `test/languages.test.ts`: exact codes, no default regions (`de`, `zh-CN`, `es-ES` are unsupported), the mapping (targets and source), `SUPERTEXT_LANGUAGE_MAP` parsing, blocked/ignored tones.
+- `test/languages.test.ts`: exact codes, the SDK defaults (`de` → `de-DE`, `zh-CN` → `zh-Hans`, `es-ES` → `es`) and what has none (`de-LI`, `gsw`, `sr-RS`), the mapping (targets and source), `SUPERTEXT_LANGUAGE_MAP` parsing, blocked/ignored tones.
+- `test/settings.test.ts`: the settings file (next to `STATE_FILE`, broken content, memory), the combo boxes' preselection (saved → suggestion → *— choose —*), the override, form validation, CSRF tokens, and the HTTP flow against a fake `users/me`: saving as Administrator, refusals without session, as Editor, without or with a forged token, cross-site and with an unknown code.
 - `test/reporting.test.ts`: ping address per setup, ping answers, state in `STATE_FILE` (also broken or unwritable), one `installed` report with the key check, Ghost version and ping address and never the key, `upgraded` only for a real version change, a 401 reported once, a missing key checked without a request, nothing sent with reports off, no exception when the center or Ghost fail, the status page's key check, setting, unmapped languages and tone warnings. Supertext is `fakeSupertext.ts`, the center a fake `fetch`; nothing reaches the live API or the center.
 - `test/i18n.test.ts`: every catalog has the English keys with the same placeholders, tags and links; French non-breaking spaces; language choice; localized status page, errors and tag descriptions.
 
@@ -174,7 +184,7 @@ The bootstrap runs on **every start** and only creates what is missing:
 
 Rules: existing accounts are never changed (no password resets, no duplicates). A password that fails Ghost's rules skips that account with a warning naming the variable; the site still starts. If the admin password was changed in Ghost, the bootstrap can't sign in and skips steps 2–5 with a warning. Passwords are never logged.
 
-The entrypoint sets `STATE_FILE=content/data/supertext-state.json` (Commando Center state, in the volume). Its target languages `de-CH,fr-CH` and source `en` are exact Supertext codes, so the demo needs no `SUPERTEXT_LANGUAGE_MAP`.
+The entrypoint sets `STATE_FILE=content/data/supertext-state.json` (Commando Center state, in the volume); the language mapping chosen on the status page is kept next to it (`content/data/supertext-settings.json`). Its target languages `de-CH,fr-CH` are exact Supertext codes and the source `en` is preselected as `en-US` (sent as `en`), so the demo needs no mapping.
 
 Other demo settings (baked into the image): `security__staffDeviceVerification=false` (Ghost would e-mail a code on every new login), `SUPERTEXT_POLITENESS=more` (formal *Sie*/*vous*), `TARGET_LANGUAGES=de-CH,fr-CH`.
 
@@ -215,12 +225,12 @@ Ghost needs a host name with a domain for its own webhooks, hence `www.example.c
 
 ```bash
 cd test/docs && npm ci && cd ../..
-node test/docs/stand-in.mjs &          # fake Supertext on :8765, real German for the sample post (sample-de.json)
+node test/docs/stand-in.mjs &          # fake Supertext on :8765 (PORT=… for another port), real German for the sample post (sample-de.json)
 # start a fresh demo container as above, wait for "[demo] Bootstrap done"
 npm run docs:screenshots               # BASE_URL, RESOLVE_TO, DEMO_* variables optional
 ```
 
-The script signs in as the editor, adds `#translate-de-ch`, captures the tag picker, posts list, status page, German draft, edits the draft and requests again (the *Not overwritten* warning), then signs in as admin for the integration (keys are masked), internal tags and status page settings. On the status page it shows the live API endpoint instead of the stand-in's address. The stand-in also answers `POST /report` (202); start the container with `SUPERTEXT_REPORT_URL` pointing at it (as above), so screenshot runs never report to the live center. Change the sample post → update `sample-de.json` (keys are the segments' inline HTML).
+The script signs in as the editor, adds `#translate-de-ch`, captures the tag picker, posts list, status page, German draft, edits the draft and requests again (the *Not overwritten* warning), then signs in as admin for the integration (keys are masked), internal tags, the status page's *Language mapping* and its settings. On the status page it shows the live API endpoint instead of the stand-in's address. `ONLY=status` takes only the status page's *Language mapping* and *Connection* shots (as admin), e.g. after a change to the status page. With Ghost 6.7x the editor steps need updating: Ghost's new post settings panel no longer has `[data-test-psm-trigger]`/`#tag-input` (the October 2026 mapping change regenerated `status-mapping.png` and `status-settings.png` with `ONLY=status` against Ghost 6.71). The stand-in also answers `POST /report` (202); start the container with `SUPERTEXT_REPORT_URL` pointing at it (as above), so screenshot runs never report to the live center. Change the sample post → update `sample-de.json` (keys are the segments' inline HTML).
 
 ## Dependency updates
 

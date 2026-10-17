@@ -4,9 +4,10 @@ import type { Config } from './config.js'
 import { GhostAdmin, GhostError } from './ghost/admin.js'
 import { parseWebhook, verifySignature } from './ghost/webhook.js'
 import { JobLog } from './jobs.js'
-import { format, isUiLocale, pickLocale, t, type UiLocale } from './i18n/index.js'
-import { managedTags, requestsFromTags, sourceCodeOrNull } from './languages.js'
+import { format, isUiLocale, type MessageKey, pickLocale, t, type UiLocale } from './i18n/index.js'
+import { type Language, managedTags, remapLanguages, requestsFromTags, sourceCodeOrNull } from './languages.js'
 import { PING_PATH, Reporting } from './reporting.js'
+import { CsrfTokens, effectiveMapping, mappingRows, readMappingForm, SettingsStore } from './settings.js'
 import { renderStatusPage } from './status-page.js'
 import { fontFaces, STATIC_PATH, staticFile, staticUrl } from './static.js'
 import { VERSION } from './version.js'
@@ -17,6 +18,10 @@ const log = (msg: string) => console.log(`[supertext] ${msg}`)
 
 /** The staff-only status page (proxy mode). */
 export const STATUS_PATH = '/ghost/supertext/'
+/** The status page's settings form posts here (under /ghost/ for the staff session cookie). */
+export const SETTINGS_PATH = `${STATUS_PATH}settings`
+/** Ghost roles that may change the connector's settings. */
+const ADMIN_ROLES = new Set(['Owner', 'Administrator'])
 
 export type App = {
   server: http.Server
@@ -26,6 +31,11 @@ export type App = {
   ensureTags: () => Promise<void>
   /** Commando Center: version reports, API key check, ping. */
   reporting: Reporting
+  /** The settings chosen on the status page (language mapping). */
+  settings: SettingsStore
+  /** The mapping in use (`SUPERTEXT_LANGUAGE_MAP` over the status page's choices) and the languages resolved with it. */
+  languageMap: () => Record<string, string>
+  languages: () => Language[]
 }
 
 export type AppDeps = {
@@ -65,6 +75,13 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
     ghostVersionCache = { at: Date.now(), version }
     return version
   }
+  const settings = new SettingsStore(config.connectorSettingsFile ?? null, log)
+  const csrf = new CsrfTokens()
+  /** The mapping used now: `SUPERTEXT_LANGUAGE_MAP` wins, then the status page's combo boxes. */
+  const languageMap = () => effectiveMapping(settings.load().languageCodes, config.languageMap)
+  const languages = () => remapLanguages(config.languages, languageMap())
+  const rows = () => mappingRows(config.sourceLanguage, config.languages.map((l) => l.code), settings.load().languageCodes, config.languageMap)
+
   const reporting = new Reporting(config, { fetch: deps.fetch, ghostVersion, log, reporterOverrides: deps.reporterOverrides })
   /** Reporter runs in the background; tracked so `idle()` (tests, shutdown) can wait for them. */
   const report = (action: 'onRequest' | 'authenticationFailed', httpStatus?: number) => {
@@ -102,14 +119,14 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
     const event = parseWebhook(body, url.searchParams.get('event'))
     send(res, 202, 'Accepted')
     if (!event) return
-    const requests = requestsFromTags(event.addedTagSlugs, config.languages)
+    const requests = requestsFromTags(event.addedTagSlugs, languages())
     if (!requests.length) return
     const g = ghost()
     if (!g) {
       log('Translation requested, but no Ghost Admin API key is configured')
       return
     }
-    const translator = new Translator({ ghost: g, languageMap: config.languageMap, log, sourceLanguage: config.sourceLanguage, supertext })
+    const translator = new Translator({ ghost: g, languageMap: languageMap(), log, sourceLanguage: config.sourceLanguage, supertext })
     for (const { force, language } of requests) {
       if (jobs.isRunning(event.id, language.code)) continue
       const job = jobs.start({
@@ -134,10 +151,11 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
     }
   }
 
-  async function staffUser(req: IncomingMessage): Promise<{ name: string; email: string } | null> {
+  /** The signed-in Ghost staff user (Ghost checks the session cookie), with roles and a session key for CSRF tokens. */
+  async function staffUser(req: IncomingMessage): Promise<{ name: string; email: string; admin: boolean; session: string } | null> {
     if (!config.upstream || !req.headers.cookie) return null
     try {
-      const res = await (deps.fetch ?? fetch)(`${config.upstream}/ghost/api/admin/users/me/`, {
+      const res = await (deps.fetch ?? fetch)(`${config.upstream}/ghost/api/admin/users/me/?include=roles`, {
         headers: {
           Accept: 'application/json',
           'Accept-Version': 'v6.0',
@@ -149,14 +167,47 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
         signal: AbortSignal.timeout(10_000),
       })
       if (!res.ok) return null
-      const user = ((await res.json()) as { users?: Array<{ name: string; email: string }> }).users?.[0]
-      return user ?? null
+      const user = ((await res.json()) as { users?: Array<{ name: string; email: string; roles?: Array<{ name?: string }> }> }).users?.[0]
+      if (!user) return null
+      const cookie = req.headers.cookie
+      const session = /(?:^|;\s*)ghost-admin-api-session=([^;]+)/.exec(cookie)?.[1] ?? cookie
+      return {
+        admin: (user.roles ?? []).some((r) => ADMIN_ROLES.has(r.name ?? '')),
+        email: user.email,
+        name: user.name,
+        session: `${user.email}\n${session}`,
+      }
     } catch {
       return null
     }
   }
 
-  async function handleStatus(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  /** Saves the language mapping: Ghost administrators only, with the page's CSRF token and a same-origin request. */
+  async function handleSettings(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (!config.upstream) return send(res, 404, 'Not found')
+    const locale = pickLocale(config.uiLanguage, header(req, 'accept-language'))
+    const refuse = (status: number, key: MessageKey) => send(res, status, t(locale, key))
+    const user = await staffUser(req)
+    if (!user) return refuse(401, 'page.mappingSignIn')
+    if (!user.admin) return refuse(403, 'page.mappingAdminOnly')
+    const origin = header(req, 'origin')
+    if (origin && origin !== new URL(config.siteUrl).origin) return refuse(403, 'page.mappingCrossSite')
+    let form: URLSearchParams
+    try {
+      form = new URLSearchParams(await readBody(req, 100_000))
+    } catch {
+      return refuse(413, 'page.mappingTooLarge')
+    }
+    if (!csrf.verify(user.session, form.get('csrf'))) return refuse(403, 'page.mappingExpired')
+    const codes = readMappingForm(form, rows())
+    if (!codes) return refuse(400, 'page.mappingInvalid')
+    const stored = settings.save({ ...settings.load(), languageCodes: codes })
+    log(`Language mapping saved by ${user.email}: ${Object.entries(codes).map(([k, v]) => `${k}=${v}`).join(', ') || '(none)'}`)
+    res.writeHead(303, { 'Cache-Control': 'no-store', Location: `${STATUS_PATH}?saved=${stored ? '1' : 'memory'}#mapping` })
+    res.end()
+  }
+
+  async function handleStatus(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
     if (!config.upstream) {
       return send(res, 404, 'The status page is only available when the connector runs in front of Ghost (GHOST_UPSTREAM).')
     }
@@ -183,13 +234,21 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
     const html = renderStatusPage({
       ghost: ghostState,
       jobs: jobs.list(),
-      languages: config.languages,
+      languages: languages(),
       locale,
+      mapping: {
+        canEdit: user.admin,
+        csrf: csrf.token(user.session),
+        formAction: SETTINGS_PATH,
+        persistent: Boolean(settings.file),
+        rows: rows(),
+        saved: url.searchParams.get('saved') === '1' ? 'saved' : url.searchParams.get('saved') === 'memory' ? 'memory' : null,
+      },
       reports: { callbackUrl: reporting.callbackUrl, check: reporting.lastCheck(), enabled: reporting.enabled },
       siteTitle,
       siteUrl: config.siteUrl,
       sourceLanguage: config.sourceLanguage,
-      sourceTarget: sourceCodeOrNull(config.sourceLanguage, config.languageMap),
+      sourceTarget: sourceCodeOrNull(config.sourceLanguage, languageMap()),
       supertext: { endpoint: config.supertextApiUrl, keyConfigured: Boolean(supertext) },
       version: VERSION,
       viewer: `${user.name} (${user.email})`,
@@ -247,7 +306,14 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
         return void res.end(req.method === 'HEAD' ? undefined : file.body)
       }
       // Under /ghost/ so the browser sends Ghost's staff session cookie (its path is /ghost).
-      if (path === STATUS_PATH || path === STATUS_PATH.slice(0, -1)) return handleStatus(req, res)
+      if (path === STATUS_PATH || path === STATUS_PATH.slice(0, -1)) return handleStatus(req, res, url)
+      if (path === SETTINGS_PATH) {
+        if (req.method !== 'POST') {
+          res.writeHead(303, { Location: STATUS_PATH })
+          return void res.end()
+        }
+        return handleSettings(req, res)
+      }
       if (path === '/supertext' || path === '/supertext/') {
         res.writeHead(302, { Location: STATUS_PATH })
         return void res.end()
@@ -268,8 +334,11 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
       while (pending.size) await Promise.allSettled([...pending])
     },
     jobs,
+    languageMap,
+    languages,
     reporting,
     server,
+    settings,
   }
 }
 

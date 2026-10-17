@@ -6,6 +6,7 @@
  *   BASE_URL            default http://www.example.com (the demo's `url`)
  *   RESOLVE_TO          default 127.0.0.1: where the browser sends BASE_URL's host
  *   DEMO_ADMIN_EMAIL / DEMO_ADMIN_PASSWORD, DEMO_EDITOR_EMAIL / DEMO_EDITOR_PASSWORD
+ *   ONLY=status         only the status page's sections (language mapping, connection), as admin
  *
  * The status page shows the Supertext endpoint the connector uses; in the screenshots it
  * is shown as the live endpoint instead of the stand-in's local address.
@@ -87,87 +88,95 @@ async function setRequestTag(page, tag, add) {
   await page.waitForTimeout(2500)
 }
 
-// --- User guide (editor account) ---------------------------------------------------------
-const editor = await session(EDITOR)
-await openPost(editor, SOURCE_TITLE)
-await editor.click('[data-test-psm-trigger]')
-await editor.click('#tag-input input')
-await editor.keyboard.type('#translate')
-await editor.waitForSelector('.ember-power-select-option')
-await editor.waitForTimeout(500)
-const tagField = editor.locator('#tag-input').locator('xpath=ancestor::div[contains(@class,"form-group")]')
-const dropdown = editor.locator('.ember-power-select-dropdown')
-{
-  const a = await box(tagField)
-  const b = await box(dropdown)
-  await shot(editor, 'tag-picker', pad({ height: b.y + b.height - a.y, width: Math.max(a.width, b.width), x: a.x, y: a.y }))
-}
-await editor.locator('.ember-power-select-option', { hasText: '#translate-de-ch' }).first().click()
-await editor.keyboard.press('Escape')
-await editor.waitForTimeout(400)
-await shot(editor, 'tag-added', pad(await box(tagField)))
+const ONLY_STATUS = process.env.ONLY === 'status'
+const admin = ONLY_STATUS ? await session(ADMIN) : await editorAndAdminShots()
 
-const german = await waitForPost(editor, 'tag:hash-lang-de-ch')
-await editor.goto(`${B}/ghost/#/posts`)
-await editor.getByText(GERMAN_TITLE).first().waitFor()
-await quiet(editor)
-await editor.waitForTimeout(800)
-await shot(editor, 'posts-list', { height: 300, width: 1060, x: 330, y: 0 })
+async function editorAndAdminShots() {
+  // --- User guide (editor account) ---------------------------------------------------------
+  const editor = await session(EDITOR)
+  await openPost(editor, SOURCE_TITLE)
+  await editor.click('[data-test-psm-trigger]')
+  await editor.click('#tag-input input')
+  await editor.keyboard.type('#translate')
+  await editor.waitForSelector('.ember-power-select-option')
+  await editor.waitForTimeout(500)
+  const tagField = editor.locator('#tag-input').locator('xpath=ancestor::div[contains(@class,"form-group")]')
+  const dropdown = editor.locator('.ember-power-select-dropdown')
+  {
+    const a = await box(tagField)
+    const b = await box(dropdown)
+    await shot(editor, 'tag-picker', pad({ height: b.y + b.height - a.y, width: Math.max(a.width, b.width), x: a.x, y: a.y }))
+  }
+  await editor.locator('.ember-power-select-option', { hasText: '#translate-de-ch' }).first().click()
+  await editor.keyboard.press('Escape')
+  await editor.waitForTimeout(400)
+  await shot(editor, 'tag-added', pad(await box(tagField)))
 
-await statusPage(editor)
-await shot(editor, 'status-created', pad(await box(editor.locator('#jobs')), 0))
+  const german = await waitForPost(editor, 'tag:hash-lang-de-ch')
+  await editor.goto(`${B}/ghost/#/posts`)
+  await editor.getByText(GERMAN_TITLE).first().waitFor()
+  await quiet(editor)
+  await editor.waitForTimeout(800)
+  await shot(editor, 'posts-list', { height: 300, width: 1060, x: 330, y: 0 })
 
-await editor.goto(`${B}/ghost/#/editor/post/${german.id}`)
-await editor.getByText('So funktioniert es').first().waitFor()
-await quiet(editor)
-await editor.waitForTimeout(1000)
-await shot(editor, 'translated-de', { height: 700, width: 820, x: 290, y: 120 })
+  await statusPage(editor)
+  await shot(editor, 'status-created', pad(await box(editor.locator('#jobs')), 0))
 
-// An editor polishes the German draft, then someone requests the translation again.
-await editor.getByText('So funktioniert es').first().click()
-await editor.keyboard.press('End')
-await editor.keyboard.type(' in drei Schritten')
-await editor.waitForTimeout(4000) // drafts autosave
-await openPost(editor, SOURCE_TITLE)
-await setRequestTag(editor, '#translate-de-ch', false)
-await setRequestTag(editor, '#translate-de-ch', true)
-await editor.waitForTimeout(4000)
-await statusPage(editor)
-await shot(editor, 'status-kept', pad(await box(editor.locator('#jobs')), 0))
+  await editor.goto(`${B}/ghost/#/editor/post/${german.id}`)
+  await editor.getByText('So funktioniert es').first().waitFor()
+  await quiet(editor)
+  await editor.waitForTimeout(1000)
+  await shot(editor, 'translated-de', { height: 700, width: 820, x: 290, y: 120 })
 
-// --- Installation guide (admin account) -------------------------------------------------
-const admin = await session(ADMIN)
-const integration = (await adminApi(admin, 'integrations/?include=webhooks')).integrations.find((i) => i.name === 'Supertext Translation')
-await admin.goto(`${B}/ghost/#/settings/integrations/${integration.id}`)
-const modal = admin.locator('[role=dialog], .modal-content, section[data-testid=custom-integration-modal]').first()
-await admin.getByText('Admin API key').first().waitFor()
-await quiet(admin)
-// Never show keys in the docs.
-await admin.evaluate(() => {
-  for (const el of document.querySelectorAll('input, [class*=key], code')) {
-    const v = 'value' in el ? el.value : el.textContent
-    if (/^[0-9a-f]{24}(:[0-9a-f]+)?$|^[0-9a-f]{26}$/.test((v ?? '').trim())) {
-      if ('value' in el) el.value = '•'.repeat(26)
-      else el.textContent = '•'.repeat(26)
+  // An editor polishes the German draft, then someone requests the translation again.
+  await editor.getByText('So funktioniert es').first().click()
+  await editor.keyboard.press('End')
+  await editor.keyboard.type(' in drei Schritten')
+  await editor.waitForTimeout(4000) // drafts autosave
+  await openPost(editor, SOURCE_TITLE)
+  await setRequestTag(editor, '#translate-de-ch', false)
+  await setRequestTag(editor, '#translate-de-ch', true)
+  await editor.waitForTimeout(4000)
+  await statusPage(editor)
+  await shot(editor, 'status-kept', pad(await box(editor.locator('#jobs')), 0))
+
+  // --- Installation guide (admin account) -------------------------------------------------
+  const admin = await session(ADMIN)
+  const integration = (await adminApi(admin, 'integrations/?include=webhooks')).integrations.find((i) => i.name === 'Supertext Translation')
+  await admin.goto(`${B}/ghost/#/settings/integrations/${integration.id}`)
+  const modal = admin.locator('[role=dialog], .modal-content, section[data-testid=custom-integration-modal]').first()
+  await admin.getByText('Admin API key').first().waitFor()
+  await quiet(admin)
+  // Never show keys in the docs.
+  await admin.evaluate(() => {
+    for (const el of document.querySelectorAll('input, [class*=key], code')) {
+      const v = 'value' in el ? el.value : el.textContent
+      if (/^[0-9a-f]{24}(:[0-9a-f]+)?$|^[0-9a-f]{26}$/.test((v ?? '').trim())) {
+        if ('value' in el) el.value = '•'.repeat(26)
+        else el.textContent = '•'.repeat(26)
+      }
     }
-  }
-  for (const el of document.querySelectorAll('*')) {
-    if (el.children.length === 0 && /^[0-9a-f]{24}:[0-9a-f]{20,}|^[0-9a-f]{26}$/.test(el.textContent.trim())) el.textContent = '•'.repeat(26)
-  }
-})
-await admin.waitForTimeout(800)
-await shot(admin, 'integration', pad(await box(modal), 0))
+    for (const el of document.querySelectorAll('*')) {
+      if (el.children.length === 0 && /^[0-9a-f]{24}:[0-9a-f]{20,}|^[0-9a-f]{26}$/.test(el.textContent.trim())) el.textContent = '•'.repeat(26)
+    }
+  })
+  await admin.waitForTimeout(800)
+  await shot(admin, 'integration', pad(await box(modal), 0))
 
-await admin.goto(`${B}/ghost/#/tags?type=internal`)
-await admin.getByText('#translate-de-ch').first().waitFor()
-await quiet(admin)
-await admin.waitForTimeout(500)
-await shot(admin, 'tags', { height: 720, width: 1060, x: 330, y: 0 })
+  await admin.goto(`${B}/ghost/#/tags?type=internal`)
+  await admin.getByText('#translate-de-ch').first().waitFor()
+  await quiet(admin)
+  await admin.waitForTimeout(500)
+  await shot(admin, 'tags', { height: 720, width: 1060, x: 330, y: 0 })
+
+  return admin
+}
 
 await statusPage(admin)
 const languages = await box(admin.locator('#languages'))
-const settings = await box(admin.locator('#settings'))
-await shot(admin, 'status-settings', { height: settings.y + settings.height - languages.y, width: languages.width, x: languages.x, y: languages.y })
+const mapping = await box(admin.locator('#mapping'))
+await shot(admin, 'status-mapping', { height: mapping.y + mapping.height - languages.y, width: languages.width, x: languages.x, y: languages.y })
+await shot(admin, 'status-settings', pad(await box(admin.locator('#settings')), 0))
 
 await browser.close()
 console.log(`Screenshots written to ${OUT}`)

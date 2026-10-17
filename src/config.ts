@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from 'node:fs'
 
+import { settingsPath } from './settings.js'
 import { type Language, parseLanguageMap, parsePoliteness, parseTargetLanguages } from './languages.js'
 import { reportsEnabled } from './vendor/supertext-plugin-health/index.js'
 import { SUPERTEXT_ENVIRONMENTS } from './supertext/client.js'
@@ -21,7 +22,10 @@ export type Config = {
   supertextApiUrl: string
   sourceLanguage: string
   languages: Language[]
-  /** `SUPERTEXT_LANGUAGE_MAP`: configured code → Supertext code (targets and source). */
+  /**
+   * `SUPERTEXT_LANGUAGE_MAP`: configured code → Supertext code (targets and source). Overrides
+   * the mapping chosen on the status page (`SUPERTEXT_SETTINGS_FILE`) for the languages it names.
+   */
   languageMap: Record<string, string>
   /** "Send version information to Supertext": `SUPERTEXT_VERSION_REPORTS` (default on). */
   versionReports: boolean
@@ -29,6 +33,8 @@ export type Config = {
   connectorUrl: string | null
   /** JSON file for the Commando Center state (what was reported, the latest key check). */
   stateFile: string | null
+  /** JSON file for the settings chosen on the status page (`SUPERTEXT_SETTINGS_FILE`, else next to `STATE_FILE`). */
+  connectorSettingsFile?: string | null
   /** `en`, `de`, `fr`, `it`, or `auto` (status page follows the browser's Accept-Language). */
   uiLanguage: string
   settingsFile: string | null
@@ -61,6 +67,7 @@ export function loadConfig(): Config {
   const connectorUrl = env('CONNECTOR_URL').replace(/\/+$/, '')
 
   return {
+    connectorSettingsFile: settingsPath(env('SUPERTEXT_SETTINGS_FILE') || null, env('STATE_FILE') || null),
     connectorUrl: /^https?:\/\/[^/]/i.test(connectorUrl) ? connectorUrl : null,
     ghostSecrets: () => {
       const file = fileSecrets()
