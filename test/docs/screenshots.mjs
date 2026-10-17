@@ -23,6 +23,14 @@ const GERMAN_TITLE = 'Übersetzen Sie Ihre Ghost-Beiträge mit Supertext'
 
 const browser = await chromium.launch({ args: [`--host-resolver-rules=MAP ${new URL(B).hostname} ${RESOLVE_TO}`] })
 
+// On an error, keep what each browser page showed (test/docs/error-*.png, not committed; CI uploads them).
+process.on('uncaughtException', async (err) => {
+  console.error(err)
+  const pages = browser.contexts().flatMap((c) => c.pages())
+  for (const [i, p] of pages.entries()) await p.screenshot({ path: new URL(`error-${i + 1}.png`, import.meta.url).pathname }).catch(() => {})
+  process.exit(1)
+})
+
 async function session([email, password]) {
   const context = await browser.newContext({ viewport: { width: 1400, height: 900 } })
   const page = await context.newPage()
@@ -38,7 +46,26 @@ async function session([email, password]) {
 const quiet = (page) =>
   page.addStyleTag({ content: '*{animation-duration:0s!important;transition-duration:0s!important;caret-color:transparent!important}' })
 const pad = (r, p = 12) => ({ height: r.height + 2 * p, width: r.width + 2 * p, x: Math.max(0, r.x - p), y: Math.max(0, r.y - p) })
-const shot = (page, name, clip) => page.screenshot({ clip, fullPage: Boolean(clip), path: `${OUT}/${name}.png` })
+/**
+ * Dates and times differ on every run (job times, key check, webhooks' "Last triggered",
+ * "x minutes ago"), so they are frozen to fixed values: the images only change when the UI does.
+ */
+const freezeTimes = (page) =>
+  page.evaluate(() => {
+    let ago = 0
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent
+        .replace(/\b[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{1,2}, \d{4}, \d{2}:\d{2}:\d{2} [AP]M\b/g, 'Mon, Oct 5, 2026, 09:12:16 PM')
+        .replace(/\b\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC\b/g, '2026-10-05 19:12 UTC')
+        .replace(/\b(a few seconds|a minute|\d+ minutes|an hour|\d+ hours|a day|\d+ days) ago\b/g, () => (ago++ === 0 ? 'a few seconds ago' : '1 minute ago'))
+      if (text !== node.textContent) node.textContent = text
+    }
+  })
+const shot = async (page, name, clip) => {
+  await freezeTimes(page)
+  return page.screenshot({ clip, fullPage: Boolean(clip), path: `${OUT}/${name}.png` })
+}
 const box = async (locator) => (await locator.boundingBox()) ?? (await locator.evaluate((el) => el.getBoundingClientRect().toJSON()))
 
 /** Admin API call from inside the page, so it uses the browser's session and host mapping. */
@@ -66,43 +93,66 @@ async function statusPage(page) {
   }, LIVE_API)
 }
 
+// Ghost Admin's editor (React since Ghost 6.7x): post settings and the tag picker by test id.
+const SETTINGS = '[data-testid=settings-menu-toggle]'
+const TAGS_INPUT = '[data-testid=settings-tags-input]'
+const TAG_OPTION = '[data-testid=settings-tags-list] [role=option]'
+const exact = (text) => new RegExp(`^\\s*${text.replace(/[.*+?^${}()|[\]\\\-#]/g, '\\$&')}\\s*$`)
+
 async function openPost(page, title) {
   await page.goto(`${B}/ghost/#/posts`)
   await page.getByText(title, { exact: true }).first().click()
-  await page.waitForSelector('[data-test-psm-trigger]')
+  await page.waitForSelector(SETTINGS)
   await quiet(page)
 }
 
 async function setRequestTag(page, tag, add) {
-  if (!(await page.locator('#tag-input').isVisible())) await page.click('[data-test-psm-trigger]')
+  if (!(await page.locator(TAGS_INPUT).isVisible())) await page.click(SETTINGS)
   if (add) {
-    await page.click('#tag-input input')
+    await page.click(TAGS_INPUT)
     await page.keyboard.type(tag)
-    await page.locator('.ember-power-select-option', { hasText: tag }).first().click()
+    await page.locator(TAG_OPTION).filter({ hasText: exact(tag) }).first().click()
   } else {
-    await page.locator('#tag-input li', { hasText: tag }).locator('.ember-power-select-multiple-remove-btn').click()
+    await page.locator(`[data-testid=settings-tags-token][aria-label="Remove ${tag}"]`).click()
   }
   await page.keyboard.press('Escape')
   // Ghost saves tag changes in the post settings right away.
   await page.waitForTimeout(2500)
 }
 
+/** The connector creates the request tags once Ghost is up; the tag picker caches its first search. */
+async function waitForTags(page, timeout = 120000) {
+  const end = Date.now() + timeout
+  while (Date.now() < end) {
+    const tags = (await adminApi(page, `tags/?filter=${encodeURIComponent("slug:hash-translate-de-ch")}`)).tags ?? []
+    if (tags.length) return
+    await page.waitForTimeout(1000)
+  }
+  throw new Error('The connector did not create the request tags')
+}
+
 // --- User guide (editor account) ---------------------------------------------------------
 const editor = await session(EDITOR)
+await waitForTags(editor)
 await openPost(editor, SOURCE_TITLE)
-await editor.click('[data-test-psm-trigger]')
-await editor.click('#tag-input input')
+await editor.click(SETTINGS)
+await editor.click(TAGS_INPUT)
 await editor.keyboard.type('#translate')
-await editor.waitForSelector('.ember-power-select-option')
+await editor.waitForSelector(TAG_OPTION)
 await editor.waitForTimeout(500)
-const tagField = editor.locator('#tag-input').locator('xpath=ancestor::div[contains(@class,"form-group")]')
-const dropdown = editor.locator('.ember-power-select-dropdown')
+// The "Tags" label with the picker: the innermost element holding both.
+const tagField = editor
+  .locator('div')
+  .filter({ has: editor.locator('label', { hasText: /^Tags$/ }) })
+  .filter({ has: editor.locator('[data-testid=settings-tags-field]') })
+  .last()
+const dropdown = editor.locator('[data-testid=settings-tags-list]').locator('xpath=..')
 {
   const a = await box(tagField)
   const b = await box(dropdown)
   await shot(editor, 'tag-picker', pad({ height: b.y + b.height - a.y, width: Math.max(a.width, b.width), x: a.x, y: a.y }))
 }
-await editor.locator('.ember-power-select-option', { hasText: '#translate-de-ch' }).first().click()
+await editor.locator(TAG_OPTION).filter({ hasText: exact('#translate-de-ch') }).first().click()
 await editor.keyboard.press('Escape')
 await editor.waitForTimeout(400)
 await shot(editor, 'tag-added', pad(await box(tagField)))
@@ -118,13 +168,13 @@ await statusPage(editor)
 await shot(editor, 'status-created', pad(await box(editor.locator('#jobs')), 0))
 
 await editor.goto(`${B}/ghost/#/editor/post/${german.id}`)
-await editor.getByText('So funktioniert es').first().waitFor()
+await editor.getByText('So funktioniert es').filter({ visible: true }).first().waitFor()
 await quiet(editor)
 await editor.waitForTimeout(1000)
 await shot(editor, 'translated-de', { height: 700, width: 820, x: 290, y: 120 })
 
 // An editor polishes the German draft, then someone requests the translation again.
-await editor.getByText('So funktioniert es').first().click()
+await editor.getByText('So funktioniert es').filter({ visible: true }).first().click()
 await editor.keyboard.press('End')
 await editor.keyboard.type(' in drei Schritten')
 await editor.waitForTimeout(4000) // drafts autosave
