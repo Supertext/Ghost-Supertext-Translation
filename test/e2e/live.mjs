@@ -99,7 +99,7 @@ async function statusPage() {
 // Ghost Admin's editor (React since Ghost 6.7x): post settings and the tag picker by test id.
 const SETTINGS = '[data-testid=settings-menu-toggle]'
 const TAGS_INPUT = '[data-testid=settings-tags-input]'
-const exact = (text) => new RegExp(`^\\s*${text.replace(/[-#]/g, '\\$&')}\\s*$`)
+const exact = (text) => new RegExp(`^\\s*${text.replace(/[.*+?^${}()|[\]\\\-#]/g, '\\$&')}\\s*$`)
 
 /** Adds (or removes) a request tag in the post settings and waits until Ghost saved it. */
 async function setTag(postId, tag, add) {

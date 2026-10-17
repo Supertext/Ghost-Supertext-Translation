@@ -97,7 +97,7 @@ async function statusPage(page) {
 const SETTINGS = '[data-testid=settings-menu-toggle]'
 const TAGS_INPUT = '[data-testid=settings-tags-input]'
 const TAG_OPTION = '[data-testid=settings-tags-list] [role=option]'
-const exact = (text) => new RegExp(`^\\s*${text.replace(/[-#]/g, '\\$&')}\\s*$`)
+const exact = (text) => new RegExp(`^\\s*${text.replace(/[.*+?^${}()|[\]\\\-#]/g, '\\$&')}\\s*$`)
 
 async function openPost(page, title) {
   await page.goto(`${B}/ghost/#/posts`)
