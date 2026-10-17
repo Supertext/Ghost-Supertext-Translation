@@ -38,7 +38,26 @@ async function session([email, password]) {
 const quiet = (page) =>
   page.addStyleTag({ content: '*{animation-duration:0s!important;transition-duration:0s!important;caret-color:transparent!important}' })
 const pad = (r, p = 12) => ({ height: r.height + 2 * p, width: r.width + 2 * p, x: Math.max(0, r.x - p), y: Math.max(0, r.y - p) })
-const shot = (page, name, clip) => page.screenshot({ clip, fullPage: Boolean(clip), path: `${OUT}/${name}.png` })
+/**
+ * Dates and times differ on every run (job times, key check, webhooks' "Last triggered",
+ * "x minutes ago"), so they are frozen to fixed values: the images only change when the UI does.
+ */
+const freezeTimes = (page) =>
+  page.evaluate(() => {
+    let ago = 0
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent
+        .replace(/\b[A-Z][a-z]{2}, [A-Z][a-z]{2} \d{1,2}, \d{4}, \d{2}:\d{2}:\d{2} [AP]M\b/g, 'Mon, Oct 5, 2026, 09:12:16 PM')
+        .replace(/\b\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC\b/g, '2026-10-05 19:12 UTC')
+        .replace(/\b(a few seconds|a minute|\d+ minutes|an hour|\d+ hours|a day|\d+ days) ago\b/g, () => (ago++ === 0 ? 'a few seconds ago' : '1 minute ago'))
+      if (text !== node.textContent) node.textContent = text
+    }
+  })
+const shot = async (page, name, clip) => {
+  await freezeTimes(page)
+  return page.screenshot({ clip, fullPage: Boolean(clip), path: `${OUT}/${name}.png` })
+}
 const box = async (locator) => (await locator.boundingBox()) ?? (await locator.evaluate((el) => el.getBoundingClientRect().toJSON()))
 
 /** Admin API call from inside the page, so it uses the browser's session and host mapping. */
