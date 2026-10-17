@@ -168,13 +168,13 @@ await statusPage(editor)
 await shot(editor, 'status-created', pad(await box(editor.locator('#jobs')), 0))
 
 await editor.goto(`${B}/ghost/#/editor/post/${german.id}`)
-await editor.getByText('So funktioniert es').first().waitFor()
+await editor.getByText('So funktioniert es').filter({ visible: true }).first().waitFor()
 await quiet(editor)
 await editor.waitForTimeout(1000)
 await shot(editor, 'translated-de', { height: 700, width: 820, x: 290, y: 120 })
 
 // An editor polishes the German draft, then someone requests the translation again.
-await editor.getByText('So funktioniert es').first().click()
+await editor.getByText('So funktioniert es').filter({ visible: true }).first().click()
 await editor.keyboard.press('End')
 await editor.keyboard.type(' in drei Schritten')
 await editor.waitForTimeout(4000) // drafts autosave
