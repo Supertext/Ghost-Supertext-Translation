@@ -281,4 +281,22 @@ describe('webhook server', () => {
     expect(await (await fetch(`${base}/supertext/health`)).text()).toBe('ok')
     expect((await fetch(`${base}/ghost/supertext/`)).status).toBe(404)
   })
+
+  it('serves the logo, favicon and fonts of its pages itself, cached for a year', async () => {
+    const { base } = await start()
+    const logo = await fetch(`${base}/supertext/static/supertext-logo.svg?v=1`)
+    expect(logo.status).toBe(200)
+    expect(logo.headers.get('content-type')).toBe('image/svg+xml')
+    expect(logo.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+    expect(await logo.text()).toContain('aria-label="Supertext"')
+    const font = await fetch(`${base}/supertext/static/fonts/inter-latin-wght-normal.woff2`)
+    expect(font.headers.get('content-type')).toBe('font/woff2')
+    expect((await font.arrayBuffer()).byteLength).toBeGreaterThan(10_000)
+    expect((await fetch(`${base}/supertext/static/favicon.svg`)).status).toBe(200)
+    expect((await fetch(`${base}/supertext/static/fonts/Inter-LICENSE.txt`)).status).toBe(200)
+    // Only the known files: nothing else from the disk.
+    expect((await fetch(`${base}/supertext/static/../package.json`)).status).toBe(404)
+    expect((await fetch(`${base}/supertext/static/%2e%2e/package.json`)).status).toBe(404)
+    expect((await fetch(`${base}/supertext/static/app.css`)).status).toBe(404)
+  })
 })

@@ -14,7 +14,7 @@ The connector **never writes the source post**. Ghost rejects a save whose `upda
 src/
   index.ts           entry point: config, HTTP server, creates the request tags once Ghost is reachable
   config.ts          environment variables (+ optional settings file written by the demo)
-  server.ts          HTTP: /supertext/webhook, /supertext/health, /supertext/ping (public), /ghost/supertext/ (status page), proxy to Ghost
+  server.ts          HTTP: /supertext/webhook, /supertext/health, /supertext/ping (public), /supertext/static/ (logo, favicon, fonts), /ghost/supertext/ (status page), proxy to Ghost
   reporting.ts       Commando Center: version reports, API key check, ping (Plugin Health's InstallationReporter), state in STATE_FILE
   translate.ts       one source × one language: find existing translation, overwrite rules, translate, save
   collect.ts         which fields, Lexical blocks and card properties are translated
@@ -22,7 +22,8 @@ src/
   segments.ts        segment model, HTML document for Supertext, parsing the answer
   languages.ts       target languages, Supertext codes (SUPERTEXT_LANGUAGE_MAP, no guessing), tag names, added tags → requests
   jobs.ts            recent requests for the status page (memory, optional JSON file)
-  status-page.ts     status page HTML
+  status-page.ts     status page HTML (inline CSS, see *Look and feel*)
+  static.ts          the files of public/ served at /supertext/static/ (fixed list, cached for a year, URLs carry ?v=<version>)
   i18n/              UI strings: en.ts (source), de.ts, fr.ts, it.ts; t(), format(), pickLocale()
   version.ts         connector version, read once from package.json (status page, startup log)
   ghost/admin.ts     Admin API client (JWT from the integration key)
@@ -30,6 +31,7 @@ src/
   supertext/client.ts wrapper around the Supertext SDK: localized errors, environments, API key links
   vendor/supertext-sdk/ copy of the Supertext SDK (TypeScript sources, API in v1/; never edit, see *Supertext SDK*)
   vendor/supertext-plugin-health/ copy of Supertext Plugin Health (TypeScript sources; never edit, see *Supertext Plugin Health*)
+public/               supertext-logo.svg, favicon.svg, fonts/ (Inter, SIL Open Font License) for the connector's pages
 demo/                 Railway demo image (Ghost 6 + connector) and its bootstrap
 test/                 Vitest suites, fakes of Ghost and Supertext; test/docs = screenshots
 ```
@@ -66,6 +68,10 @@ One `<div data-st-id="N">` per segment (div, because card HTML such as toggle co
 ```
 
 Text formats become `b`, `i`, `u`, `s`, `code`, `sub`, `sup`, `mark`; links `a href`. Nothing is marked `translate="no"`: the live API then leaves stray «» quotes next to the element, while plain `<code>` already comes back untranslated (checked October 2026). `data-n` points to the original Lexical node, which is cloned when rebuilding, so formatting follows the words when the translator reorders them. Tags the translator invents or duplicates are dropped (their text kept). This follows the project rule: never one `data-st-id` per formatted run.
+
+## Look and feel
+
+The status page (and the short "Ghost is starting" page) follow supertext.com: the deep-green header bar (`#003230`, rounded bottom corners) with Supertext's mint logo (`public/supertext-logo.svg`, the website's own SVG), the warm off-white background (`#f7f5f3`), deep-green text and outlines, mint (`#78ffaf`) for finished translations and focus outlines, light grey lines (`#dfe1df`), and pill-shaped buttons and tags. Text is set in Inter, bundled in `public/fonts/` (variable font, Latin and Latin Extended; SIL Open Font License in `Inter-LICENSE.txt`), so no font is loaded from elsewhere. Supertext's heading font (ABC Ginto Nord) is licensed and not bundled; headings use Inter Bold. The colours are CSS variables at the top of the page's inline stylesheet (`src/status-page.ts`). The favicon is the logo's S mark on deep green. The files are served by the connector itself at `/supertext/static/` (`src/static.ts`: only the listed files, `Cache-Control: public, max-age=31536000, immutable`, URLs with `?v=<connector version>`); that path is outside `/ghost/`, never proxied to Ghost, and already covered by the `/supertext/` rule in setup A. The demo image copies `public/` to `/opt/supertext/public`.
 
 ## Supertext API protocol
 

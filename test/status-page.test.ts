@@ -39,3 +39,13 @@ describe('connector version', () => {
     expect(html).not.toContain('releases/tag')
   })
 })
+
+describe('look', () => {
+  it('shows the Supertext logo and favicon and uses the bundled Inter, nothing from a CDN', () => {
+    const html = renderStatusPage(data('1.0.0'))
+    expect(html).toContain('<img src="/supertext/static/supertext-logo.svg?v=1.0.0" alt="Supertext"')
+    expect(html).toContain('<link rel="icon" href="/supertext/static/favicon.svg?v=1.0.0" type="image/svg+xml">')
+    expect(html).toContain('url("/supertext/static/fonts/inter-latin-wght-normal.woff2?v=1.0.0")')
+    expect(html).not.toMatch(/https?:\/\/[^"]*(fonts\.googleapis|cdn)/)
+  })
+})

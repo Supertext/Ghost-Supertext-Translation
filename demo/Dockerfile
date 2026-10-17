@@ -35,6 +35,8 @@ ENV NODE_ENV=production \
 COPY --from=build /app/dist /opt/supertext/dist
 COPY --from=build /app/node_modules /opt/supertext/node_modules
 COPY --from=build /app/package.json /opt/supertext/package.json
+# Logo, favicon and the bundled Inter font of the connector's pages (served at /supertext/static/).
+COPY public /opt/supertext/public
 COPY demo/bootstrap.mjs demo/sample-post.html demo/entrypoint.sh /opt/supertext/demo/
 RUN chmod +x /opt/supertext/demo/entrypoint.sh
 

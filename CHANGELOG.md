@@ -6,6 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- The status page in Supertext's look: deep-green header with the Supertext logo, warm off-white background, mint for finished translations, pill-shaped tags and buttons, the Inter font and the Supertext favicon. Logo, favicon and font are served by the connector itself at `/supertext/static/` (no font from a CDN) and work on phones.
 - French and Italian interface (and German where it was missing): the status page, its messages and the tag descriptions are available in English, German, French and Italian. The status page follows the browser's language; `UI_LANGUAGE` sets one language for everyone and for new tag descriptions.
 - The status page shows the connector version (linked to its GitHub release), and the startup log names it. Ghost has no plugin list, so this is where administrators see which version runs.
 - Automatic API key check: at startup and whenever the key in `SUPERTEXT_API_KEY` is new or changed, and when Supertext rejects the key during a translation. The status page shows the latest result with its time (*the connection works*, *rejected*, *no key*, *Supertext can't be reached*, *error*) in English, German, French and Italian, with the account and API key links where they help.

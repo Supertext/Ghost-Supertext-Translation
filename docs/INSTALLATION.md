@@ -21,7 +21,7 @@ Ghost refuses to send webhooks to private network addresses (`127.0.0.1`, `10.x`
 
 ### A. In front of Ghost
 
-Run the connector with `GHOST_UPSTREAM` set to Ghost's internal address. It answers `/supertext/…` and `/ghost/supertext/` itself and passes every other request to Ghost unchanged.
+Run the connector with `GHOST_UPSTREAM` set to Ghost's internal address. It answers `/supertext/…` (webhooks, ping, health check, and the logo and font of the status page) and `/ghost/supertext/` itself and passes every other request to Ghost unchanged.
 
 Either send **all** traffic to the connector (simplest), or keep your web server in front and send only these two paths to it. For example with nginx, where Ghost listens on port 2368 and the connector on 8080:
 

@@ -8,6 +8,7 @@ import { format, isUiLocale, pickLocale, t, type UiLocale } from './i18n/index.j
 import { managedTags, requestsFromTags, sourceCodeOrNull } from './languages.js'
 import { PING_PATH, Reporting } from './reporting.js'
 import { renderStatusPage } from './status-page.js'
+import { fontFaces, STATIC_PATH, staticFile, staticUrl } from './static.js'
 import { VERSION } from './version.js'
 import { SupertextClient } from './supertext/client.js'
 import { Translator } from './translate.js'
@@ -233,6 +234,18 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
         res.writeHead(answer.status, answer.headers)
         return void res.end(answer.body)
       }
+      // Logo, favicon and fonts of the connector's pages: never proxied, cached for a year (URLs carry ?v=<version>).
+      if (path.startsWith(STATIC_PATH) && (req.method === 'GET' || req.method === 'HEAD')) {
+        const file = staticFile(path.slice(STATIC_PATH.length))
+        if (!file) return send(res, 404, 'Not found')
+        res.writeHead(200, {
+          'Cache-Control': 'public, max-age=31536000, immutable',
+          'Content-Length': file.body.length,
+          'Content-Type': file.type,
+          'X-Content-Type-Options': 'nosniff',
+        })
+        return void res.end(req.method === 'HEAD' ? undefined : file.body)
+      }
       // Under /ghost/ so the browser sends Ghost's staff session cookie (its path is /ghost).
       if (path === STATUS_PATH || path === STATUS_PATH.slice(0, -1)) return handleStatus(req, res)
       if (path === '/supertext' || path === '/supertext/') {
@@ -308,7 +321,7 @@ function proxy(req: IncomingMessage, res: ServerResponse, upstream: string, uiLa
     res.writeHead(503, { 'Content-Type': 'text/html; charset=utf-8', 'Retry-After': '5' })
     const locale = pickLocale(uiLanguage, header(req, 'accept-language'))
     res.end(
-      `<!DOCTYPE html><html lang="${locale}"><meta charset="utf-8"><meta http-equiv="refresh" content="5"><p style="font-family:sans-serif">${t(locale, 'page.ghostStarting')}</p></html>`,
+      `<!DOCTYPE html><html lang="${locale}"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="refresh" content="5"><link rel="icon" href="${staticUrl('favicon.svg', VERSION)}" type="image/svg+xml"><style>${fontFaces(VERSION)}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f7f5f3;color:#003230;font:16px/1.5 Inter,ui-sans-serif,system-ui,sans-serif}p{margin:0 16px}</style><p>${t(locale, 'page.ghostStarting')}</p></html>`,
     )
   })
   req.pipe(up)

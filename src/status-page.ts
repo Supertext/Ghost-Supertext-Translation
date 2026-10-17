@@ -4,6 +4,7 @@ import { type Language, RETRANSLATE_ALL_TAG, TRANSLATE_ALL_TAG } from './languag
 import { escapeHtml as e } from './segments.js'
 import { API_KEY_URL, SIGNUP_URL } from './supertext/client.js'
 import type { KeyCheck } from './vendor/supertext-plugin-health/index.js'
+import { fontFaces, staticUrl } from './static.js'
 import { releaseUrl } from './version.js'
 
 export type StatusPageData = {
@@ -95,43 +96,55 @@ export function renderStatusPage(d: StatusPageData): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 ${running ? '<meta http-equiv="refresh" content="4">' : ''}
 <title>${L('page.title')} · ${e(d.siteTitle)}</title>
+<link rel="icon" href="${staticUrl('favicon.svg', d.version)}" type="image/svg+xml">
 <style>
-:root{--bg:#f4f5f6;--card:#fff;--text:#15171a;--muted:#7c8b9a;--line:#e6e9eb;--green:#30cf43;--accent:#14b886}
-@media (prefers-color-scheme:dark){:root{--bg:#151719;--card:#1c1f22;--text:#e8eaed;--muted:#8e9cac;--line:#2c3136}}
+${fontFaces(d.version)}
+/* Supertext's look (supertext.com): deep green, mint, warm off-white, Inter. */
+:root{--bg:#f7f5f3;--card:#fff;--text:#003230;--muted:#505252;--line:#dfe1df;--mint:#78ffaf;--mint-hover:#86ffb7;--mint-light:#e4fff0;--green:#2bb673;--orange:#a35a00;--orange-light:#fff6e8;--red:#c4314b;--red-light:#fdebee;--blue:#1d4f91;--blue-light:#e8f0fb}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,sans-serif}
-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 24px;border-bottom:1px solid var(--line);background:var(--card)}
-header h1{margin:0;font-size:19px;font-weight:700}
-header .site{color:var(--muted);font-weight:500}
-header a{color:var(--text);font-weight:600;text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:6px 12px;white-space:nowrap}
-main{max-width:1080px;margin:0 auto;padding:24px 16px 48px;display:grid;gap:20px}
-section{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:20px 22px}
-h2{margin:0 0 12px;font-size:16px}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;font-feature-settings:"cv11";overflow-x:hidden}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:12px 24px;background:var(--text);color:#fff;padding:14px 28px;min-height:64px;max-width:1180px;margin:0 auto;border-radius:0 0 15px 15px}
+header .brand{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;margin:0;font-size:16px;font-weight:600;color:#fff;letter-spacing:0}
+header .brand img{height:22px;width:auto;display:block}
+header .site{color:rgba(255,255,255,.72);font-weight:400}
+header .spacer{flex:1}
+header a.back{display:inline-flex;align-items:center;min-height:40px;padding:7px 18px;border:1px solid rgba(255,255,255,.6);border-radius:999px;color:#fff;font-weight:500;text-decoration:none;white-space:nowrap}
+header a.back:hover{background:rgba(255,255,255,.12);border-color:#fff}
+a:focus-visible{outline:3px solid var(--mint);outline-offset:2px;border-radius:4px}
+header a.back:focus-visible{border-radius:999px}
+main{max-width:1060px;margin:0 auto;padding:28px 32px 48px;display:grid;gap:20px}
+section{background:var(--card);border:1px solid var(--line);border-radius:15px;padding:24px 28px;min-width:0}
+h2{margin:0 0 12px;font-size:18px;font-weight:700;letter-spacing:-.01em}
 p{margin:6px 0}
+a{color:var(--text);text-decoration:underline;text-decoration-color:#9aa5a3;text-underline-offset:3px}
+a:hover{text-decoration-color:currentColor}
+a.open{white-space:nowrap;font-weight:600}
 .muted{color:var(--muted)}
-.tag{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 6px;white-space:nowrap}
+.tag{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:999px;padding:2px 9px;white-space:nowrap}
+.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
 table{width:100%;border-collapse:collapse}
-th,td{text-align:left;vertical-align:top;padding:9px 10px 9px 0;border-top:1px solid var(--line)}
-th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600;border-top:0}
+th,td{text-align:left;vertical-align:top;padding:10px 12px 10px 0;border-top:1px solid var(--line)}
+th{font-size:12px;color:var(--muted);font-weight:600;border-top:0;white-space:nowrap}
 td.when{white-space:nowrap;color:var(--muted);font-size:13px}
-a{color:var(--accent)}
-a.open{white-space:nowrap}
-.badge{display:inline-block;font-size:12px;font-weight:600;border-radius:999px;padding:2px 9px;white-space:nowrap;background:var(--bg)}
-.badge.created,.badge.updated{background:#dff7e3;color:#1c7d2b}
-.badge.kept{background:#fff3d6;color:#8a5a00}
-.badge.failed{background:#fde4e4;color:#b42318}
-.badge.running{background:#e2efff;color:#1d5fbf}
-@media (prefers-color-scheme:dark){.badge.created,.badge.updated{background:#173d20;color:#7be08c}.badge.kept{background:#3d2f10;color:#f4c45c}.badge.failed{background:#451c1c;color:#ff9b93}.badge.running{background:#16304f;color:#8ab8ff}}
-dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 18px;margin:0}
-dt{color:var(--muted)}dd{margin:0}
-.ok{color:#1c7d2b;font-weight:600}.bad{color:#b42318;font-weight:600}
-@media (max-width:700px){table.jobs thead{display:none}table.jobs tr{display:block;border-top:1px solid var(--line);padding:8px 0}table.jobs td{display:block;border:0;padding:2px 0}}
+.badge{display:inline-block;font-size:12px;font-weight:600;border-radius:999px;padding:2px 10px;white-space:nowrap;background:var(--bg);color:var(--muted)}
+.badge.created,.badge.updated{background:var(--mint);color:var(--text)}
+.badge.kept{background:var(--orange-light);color:var(--orange)}
+.badge.failed{background:var(--red-light);color:var(--red)}
+.badge.running{background:var(--blue-light);color:var(--blue)}
+dl{display:grid;grid-template-columns:max-content 1fr;gap:10px 22px;margin:0}
+dt{color:var(--muted)}dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.ok{color:var(--text);font-weight:600}
+.ok::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:7px;vertical-align:1px}
+.bad{color:var(--red);font-weight:600}
+@media (max-width:700px){header{padding:12px 16px;border-radius:0 0 12px 12px}main{padding:20px 16px 40px}section{padding:18px 16px}table.jobs thead{display:none}table.jobs tr{display:block;border-top:1px solid var(--line);padding:8px 0}table.jobs td{display:block;border:0;padding:2px 0}dl{grid-template-columns:1fr;gap:2px}dd{margin-bottom:10px}}
 </style>
 </head>
 <body>
 <header>
-  <h1>${L('page.title')} <span class="site">· ${e(d.siteTitle)}</span></h1>
-  <a href="${e(d.siteUrl)}/ghost/">${L('page.back')}</a>
+  <h1 class="brand"><img src="${staticUrl('supertext-logo.svg', d.version)}" alt="Supertext" width="122" height="22"><span>${L('page.title')} <span class="site">· ${e(d.siteTitle)}</span></span></h1>
+  <span class="spacer"></span>
+  <a class="back" href="${e(d.siteUrl)}/ghost/">${L('page.back')}</a>
 </header>
 <main>
 <section id="how">
@@ -154,9 +167,9 @@ ${rows}
   <p>${L('page.sourceLanguage')} <strong>${e(languageLabel(d.sourceLanguage, d.locale))}</strong> ${
     d.sourceTarget === null ? `<span class="bad">${L('page.notMapped')}</span>` : `<span class="muted">${e(d.sourceTarget ?? d.sourceLanguage)}</span>`
   }</p>
-  <table><thead><tr><th>${L('page.colTarget')}</th><th>${L('page.colTranslate')}</th><th>${L('page.colRetranslate')}</th><th>${L('page.colMarks')}</th></tr></thead><tbody>
+  <div class="table-scroll"><table><thead><tr><th>${L('page.colTarget')}</th><th>${L('page.colTranslate')}</th><th>${L('page.colRetranslate')}</th><th>${L('page.colMarks')}</th></tr></thead><tbody>
 ${langRows}
-  </tbody></table>
+  </tbody></table></div>
 </section>
 <section id="settings">
   <h2>${L('page.connectionTitle')}</h2>
