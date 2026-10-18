@@ -182,6 +182,10 @@ Language collections must come before `/`. Then add menu links to `/de-ch/` and 
 
 Ghost's **Publication language** (Settings → General) is one value for the whole site, so the `lang` attribute of every page stays the source language unless your theme sets it from the `#lang-…` tag.
 
+## Translation files
+
+The status page links to **Translation files** (`/ghost/supertext/files`, setup A only): *Export for translation* (XLIFF 1.2 or HTML) and *Import translation* ([user guide](USER_GUIDE.md#translate-with-a-file-xliff-or-html)). Nothing to configure, and no Supertext API key needed (no API call). It needs a signed-in Ghost staff session with the **Owner, Administrator or Editor** role (they may edit every post; the connector writes with the integration's key), the page's CSRF token and a same-origin request. Uploads are limited to **10 MB** (refused before reading), parsed in memory and never stored. Imported translations are saved as drafts like tag translations, with the same overwrite rules.
+
 ## All settings
 
 | Variable | Default | Meaning |

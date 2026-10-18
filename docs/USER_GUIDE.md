@@ -46,6 +46,46 @@ Logged-in staff can open the **Supertext status page** at `/ghost/supertext/` on
 
 The page refreshes itself while a translation is running. Further down it shows which Supertext language each of your languages is translated into (*Language mapping*); only Ghost Owners and Administrators can change it.
 
+## Translate with a file (XLIFF or HTML)
+
+Instead of a tag, you can download a post's or page's text as a file, have it translated anywhere (a translation tool such as Trados, memoQ or Phrase, a translator, Supertext's web app) and import the translated file again. Open **Translation files** on the status page (`/ghost/supertext/files`, linked under *Translation files*). Ghost Editors, Administrators and Owners can use it (Authors and Contributors can't: the connector writes with the integration's rights).
+
+### Export for translation
+
+1. Under **Export for translation**, choose the **Post or page** (translations themselves aren't listed).
+2. Choose the **File format**:
+   - **XLIFF 1.2 (for translation tools)**: the standard format of translation tools, and the better choice for them. Formatting and links appear as protected tags. One file can hold several languages.
+   - **HTML (one language per file)**: for Supertext's web app or anyone who translates HTML. Tick exactly one language.
+3. Tick the **Target languages** and click **Download file** (`ghost-<post id>-<language>.xlf`, or `ghost-<post id>.xlf` for several languages).
+
+The file contains exactly the text a tag translation would send (see [What is not translated](#what-is-not-translated)). Whoever translates an **HTML** file must leave its head (the `supertext:` lines) and the `data-st-id` attributes alone. An HTML file can't mark text as untranslated: imported unchanged, it writes the source text into the translation.
+
+### Import translation
+
+1. Under **Import translation**, choose the **Translated file (XLIFF or HTML)** (at most 10 MB).
+2. Optionally tick **Also import texts whose source changed since the export** (skipped by default, because the translation may no longer fit) and **Also replace translations that were edited or published** (like the `#retranslate-…` tags).
+3. Click **Import translation**.
+
+The translation is saved exactly like one from a tag: a new **draft** with the language's `#lang-…` tag, linked to the original, or the existing draft if nobody edited it; edited or published translations are only replaced with the second option. Texts that aren't imported stay in the source language. The page then shows a summary per post and language, and the import also appears under *Recent translations*:
+
+| Line | Meaning |
+| --- | --- |
+| *Imported: n* | Texts written into the translation. |
+| *Skipped, source changed since the export: n* | The original's text was edited after the export. Tick the option to import them anyway, or export again. |
+| *Not translated in the file: n* | The file has no translation for these texts (XLIFF). |
+| *Formatting changed, not imported: n* | The translation broke, removed or added formatting the original doesn't have. Fix it in the translation tool. |
+| *Not in the file: n* | Text added after the export. Export again. |
+
+| Message | Meaning |
+| --- | --- |
+| *This file isn't a valid XLIFF or HTML translation file.* | The file is damaged or not XLIFF/HTML. |
+| *This file wasn't exported by the Supertext connector, or its header was removed.* | Use a file from *Export for translation*; for HTML keep its head. |
+| *The file is too large (at most 10 MB).* | Export fewer languages per file. |
+| *This file belongs to another system (…).* | It comes from another Supertext plugin (another CMS). |
+| *The post or page this file was exported from no longer exists.* | It was deleted, or the file's reference is damaged. |
+| *The site has no language ….* | The connector isn't configured for that language (any more). |
+| *Not overwritten* | As with tags: the translation was edited or published. Tick *Also replace translations that were edited or published*. |
+
 ## Translate again after changing the original
 
 If you change the original and want the translation to follow, remove the `#translate-…` tag, then add it again.

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { collect } from './collect.js'
 import { type GhostAdmin, GhostError, type GhostPost, type Resource } from './ghost/admin.js'
 import { type Language, sourceCode, targetCode } from './languages.js'
-import { applyTranslations, buildHtml, parseHtml } from './segments.js'
+import { applyTranslations, buildHtml, escapeHtml, parseHtml } from './segments.js'
 import { format, type Localizable } from './i18n/index.js'
 import { API_KEY_URL, fromSdkError, SIGNUP_URL, type SupertextClient, SupertextError } from './supertext/client.js'
 import { SupertextError as SdkError } from './vendor/supertext-sdk/v1/index.js'
@@ -100,8 +100,22 @@ export class Translator {
   constructor(private readonly opts: TranslatorOptions) {}
 
   async translate(resource: Resource, id: string, language: Language, force: boolean): Promise<TranslateResult> {
+    return this.guard(() => this.run(resource, id, language, force, null))
+  }
+
+  /**
+   * Writes translations from an imported file (segment path → translated text or HTML), with
+   * the same rules as a Supertext translation: a new draft, or the existing draft if nobody
+   * edited it (`force` replaces edited or published ones). Segments without a translation
+   * keep the source text. Needs no API key.
+   */
+  async importTranslations(resource: Resource, id: string, language: Language, force: boolean, translations: Map<string, string>): Promise<TranslateResult> {
+    return this.guard(() => this.run(resource, id, language, force, translations))
+  }
+
+  private async guard(fn: () => Promise<TranslateResult>): Promise<TranslateResult> {
     try {
-      return await this.run(resource, id, language, force)
+      return await fn()
     } catch (err) {
       const localized: Localizable[] =
         err instanceof SupertextError || err instanceof GhostError
@@ -124,7 +138,8 @@ export class Translator {
     }
   }
 
-  private async run(resource: Resource, id: string, language: Language, force: boolean): Promise<TranslateResult> {
+  /** `imported`: translations from a file instead of Supertext (null: translate with Supertext). */
+  private async run(resource: Resource, id: string, language: Language, force: boolean, imported: Map<string, string> | null): Promise<TranslateResult> {
     const { ghost } = this.opts
     const kind = resource === 'posts' ? 'post' : 'page'
     const isPost = resource === 'posts'
@@ -136,11 +151,11 @@ export class Translator {
     if (!source.lexical) {
       return result('failed', [{ key: isPost ? 'job.noLexicalPost' : 'job.noLexicalPage' }])
     }
-    if (!this.opts.supertext) {
+    if (!imported && !this.opts.supertext) {
       return result('failed', [{ key: 'job.noApiKey', params: { apiKeyUrl: API_KEY_URL, signupUrl: SIGNUP_URL } }])
     }
     // Supertext codes: the mapping or an exact match, never a guess. Nothing is sent for an unmapped language.
-    const { sourceLang, targetLang, politeness } = this.codes(language)
+    const codes = imported ? null : this.codes(language)
 
     const existing = (
       await ghost.findPosts(resource, `codeinjection_head:~'supertext:source=${source.id};lang=${language.code};'`)
@@ -161,12 +176,24 @@ export class Translator {
     }
 
     const collected = collect(source)
-    const html = buildHtml(collected.segments)
-    this.opts.log?.(
-      `Translating ${kind} ${source.id} "${source.title}" into ${language.code}: ${collected.segments.length} segments, ${html.length} characters`,
-    )
-    const translatedHtml = await this.opts.supertext.translateHtml({ html, politeness, sourceLang, targetLang })
-    const missing = applyTranslations(collected.segments, parseHtml(translatedHtml))
+    let missing: string[]
+    if (imported) {
+      this.opts.log?.(`Importing ${kind} ${source.id} "${source.title}" into ${language.code}: ${imported.size} of ${collected.segments.length} segments`)
+      missing = collected.segments
+        .filter((seg) => {
+          const value = imported.get(seg.path)
+          // Plain-text segments come back as plain text; apply() takes HTML.
+          return value === undefined || !seg.apply(seg.text !== undefined ? escapeHtml(value) : value)
+        })
+        .map((seg) => seg.path)
+    } else {
+      const html = buildHtml(collected.segments)
+      this.opts.log?.(
+        `Translating ${kind} ${source.id} "${source.title}" into ${language.code}: ${collected.segments.length} segments, ${html.length} characters`,
+      )
+      const translatedHtml = await this.opts.supertext!.translateHtml({ html, ...codes! })
+      missing = applyTranslations(collected.segments, parseHtml(translatedHtml))
+    }
 
     const lexical = collected.lexical ? JSON.stringify(collected.lexical) : source.lexical
     const fields: Record<string, unknown> = { ...collected.fields, lexical }
@@ -201,7 +228,7 @@ export class Translator {
     const messages: Localizable[] = [
       { key: existing ? 'job.updated' : 'job.created', params: { language: language.code, title: saved.title } },
     ]
-    if (missing.length) messages.push({ key: 'job.partly', params: { count: missing.length } })
+    if (missing.length) messages.push({ key: imported ? 'job.partlyImported' : 'job.partly', params: { count: missing.length } })
     return result(existing ? 'updated' : 'created', messages, {
       missing,
       translationId: saved.id,

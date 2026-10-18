@@ -17,7 +17,7 @@ Ghost has no plugin system for its admin, so this is a small **connector service
 - Ghost 6 (Lexical editor). Posts and pages.
 - Translates the title, excerpt, SEO and social fields, feature image alt text and caption, every paragraph, heading, list and quote, and the text in cards (images, galleries, callouts, toggles, buttons, headers, signup, call-to-action, product, embeds, video, audio, files).
 - One translation per language, linked to its source. Drafts that nobody touched are updated in place; edited or published translations are only replaced on request.
-- Status page for staff at `/ghost/supertext/` when the connector runs in front of Ghost.
+- Status page for staff at `/ghost/supertext/` when the connector runs in front of Ghost, with *Export for translation* / *Import translation*: XLIFF 1.2 or HTML files for translation tools, translators or Supertext's web app.
 - Demo: Ghost + connector in one Docker image (`demo/`), deployed on Railway.
 
 ## Quick start (Docker)

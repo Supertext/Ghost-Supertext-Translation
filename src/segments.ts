@@ -11,8 +11,10 @@ export type Segment = {
   html: string
   /** Writes the translated inner HTML back; returns false if it could not be used. */
   apply: (translatedHtml: string) => boolean
-  /** Where the text lives, for logs and error messages, e.g. `lexical.3` or `title`. */
+  /** Where the text lives, for logs and error messages, e.g. `lexical.3` or `title`. Unique per post (the key in translation files). */
   path: string
+  /** Plain-text segments: the text itself (`html` is its escaped form). Translation files send it as plain text. */
+  text?: string
 }
 
 export const SEGMENT_ATTR = 'data-st-id'
@@ -40,6 +42,7 @@ export function textSegment(value: unknown, path: string, set: (v: string) => vo
     },
     html: escapeHtml(text),
     path,
+    text,
   }
 }
 

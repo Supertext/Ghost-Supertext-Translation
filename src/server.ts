@@ -9,6 +9,12 @@ import { type Language, managedTags, remapLanguages, requestsFromTags, sourceCod
 import { PING_PATH, Reporting } from './reporting.js'
 import { CsrfTokens, effectiveMapping, mappingRows, readMappingForm, SettingsStore } from './settings.js'
 import { renderStatusPage } from './status-page.js'
+import { collect } from './collect.js'
+import { buildExport, type Format, FilesError, importFile, type ImportJob, MAX_UPLOAD_BYTES } from './files.js'
+import { renderFilesPage, type FilesPageData } from './files-page.js'
+import type { Localizable } from './i18n/index.js'
+import { readMarker } from './translate.js'
+import { TranslationFileError } from './vendor/supertext-sdk/index.js'
 import { fontFaces, STATIC_PATH, staticFile, staticUrl } from './static.js'
 import { VERSION } from './version.js'
 import { SupertextClient } from './supertext/client.js'
@@ -22,6 +28,12 @@ export const STATUS_PATH = '/ghost/supertext/'
 export const SETTINGS_PATH = `${STATUS_PATH}settings`
 /** Ghost roles that may change the connector's settings. */
 const ADMIN_ROLES = new Set(['Owner', 'Administrator'])
+/** Translation files: the page, its export and its import (staff with EDITOR_ROLES). */
+export const FILES_PATH = `${STATUS_PATH}files`
+export const FILES_EXPORT_PATH = `${FILES_PATH}/export`
+export const FILES_IMPORT_PATH = `${FILES_PATH}/import`
+/** Ghost roles that may edit every post: they may export and import translation files. */
+const EDITOR_ROLES = new Set(['Owner', 'Administrator', 'Editor'])
 
 export type App = {
   server: http.Server
@@ -152,7 +164,7 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
   }
 
   /** The signed-in Ghost staff user (Ghost checks the session cookie), with roles and a session key for CSRF tokens. */
-  async function staffUser(req: IncomingMessage): Promise<{ name: string; email: string; admin: boolean; session: string } | null> {
+  async function staffUser(req: IncomingMessage): Promise<{ name: string; email: string; admin: boolean; editor: boolean; session: string } | null> {
     if (!config.upstream || !req.headers.cookie) return null
     try {
       const res = await (deps.fetch ?? fetch)(`${config.upstream}/ghost/api/admin/users/me/?include=roles`, {
@@ -173,6 +185,7 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
       const session = /(?:^|;\s*)ghost-admin-api-session=([^;]+)/.exec(cookie)?.[1] ?? cookie
       return {
         admin: (user.roles ?? []).some((r) => ADMIN_ROLES.has(r.name ?? '')),
+        editor: (user.roles ?? []).some((r) => EDITOR_ROLES.has(r.name ?? '')),
         email: user.email,
         name: user.name,
         session: `${user.email}\n${session}`,
@@ -252,10 +265,193 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
       supertext: { endpoint: config.supertextApiUrl, keyConfigured: Boolean(supertext) },
       version: VERSION,
       viewer: `${user.name} (${user.email})`,
+      filesUrl: FILES_PATH,
       webhookSecret: Boolean(config.ghostSecrets().webhookSecret),
     })
     res.writeHead(200, { 'Cache-Control': 'no-store', 'Content-Type': 'text/html; charset=utf-8' })
     res.end(html)
+  }
+
+  // --- Translation files: Export for translation / Import translation (src/files.ts) -----------
+
+  type FilesState = { error?: Localizable | null; jobs?: ImportJob[] | null; selected?: FilesPageData['selected'] }
+
+  /** The translation files page (staff session; export and import for EDITOR_ROLES). */
+  async function renderFiles(req: IncomingMessage, res: ServerResponse, user: NonNullable<Awaited<ReturnType<typeof staffUser>>>, state: FilesState = {}, status = 200): Promise<void> {
+    const locale = pickLocale(config.uiLanguage, header(req, 'accept-language'))
+    const g = ghost()
+    const items: FilesPageData['items'] = []
+    let siteTitle = new URL(config.siteUrl).host
+    if (g) {
+      siteTitle = (await g.site().catch(() => null))?.title ?? siteTitle
+      for (const resource of ['posts', 'pages'] as const) {
+        const list = await g.listPosts(resource).catch(() => [])
+        for (const p of list) {
+          if (readMarker(p.codeinjection_head)) continue
+          items.push({ kind: resource === 'pages' ? 'page' : 'post', status: String(p.status ?? ''), title: String(p.title ?? ''), value: `${resource}:${p.id}` })
+        }
+      }
+    }
+    const html = renderFilesPage({
+      canUse: user.editor,
+      csrf: csrf.token(user.session),
+      error: state.error ?? null,
+      exportAction: FILES_EXPORT_PATH,
+      importAction: FILES_IMPORT_PATH,
+      items,
+      jobs: state.jobs ?? null,
+      languages: languages(),
+      locale,
+      selected: state.selected,
+      siteTitle,
+      siteUrl: config.siteUrl,
+      statusUrl: STATUS_PATH,
+      version: VERSION,
+    })
+    res.writeHead(status, { 'Cache-Control': 'no-store', 'Content-Type': 'text/html; charset=utf-8' })
+    res.end(html)
+  }
+
+  /** Signed-in staff for the files page; for POSTs also an editor role, a same-origin request (CSRF token checked by the caller). */
+  async function filesUser(req: IncomingMessage, res: ServerResponse, post: boolean) {
+    if (!config.upstream) {
+      send(res, 404, 'Not found')
+      return null
+    }
+    const user = await staffUser(req)
+    if (!user) {
+      if (post) send(res, 401, t(pickLocale(config.uiLanguage, header(req, 'accept-language')), 'page.mappingSignIn'))
+      else {
+        res.writeHead(302, { Location: `${config.siteUrl}/ghost/#/signin` })
+        res.end()
+      }
+      return null
+    }
+    if (post) {
+      const locale = pickLocale(config.uiLanguage, header(req, 'accept-language'))
+      if (!user.editor) {
+        send(res, 403, t(locale, 'files.editorsOnly'))
+        return null
+      }
+      const origin = header(req, 'origin')
+      if (origin && origin !== new URL(config.siteUrl).origin) {
+        send(res, 403, t(locale, 'page.mappingCrossSite'))
+        return null
+      }
+    }
+    return user
+  }
+
+  async function handleExport(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const user = await filesUser(req, res, true)
+    if (!user) return
+    let form: URLSearchParams
+    try {
+      form = new URLSearchParams(await readBody(req, 100_000))
+    } catch {
+      return send(res, 413, t(pickLocale(config.uiLanguage, header(req, 'accept-language')), 'page.mappingTooLarge'))
+    }
+    if (!csrf.verify(user.session, form.get('csrf'))) return send(res, 403, t(pickLocale(config.uiLanguage, header(req, 'accept-language')), 'page.mappingExpired'))
+    const item = form.get('item') ?? ''
+    const fmt: Format = form.get('format') === 'html' ? 'html' : 'xliff'
+    const codes = form.getAll('target')
+    const selected = { format: fmt, item, targets: codes }
+    try {
+      const m = /^(posts|pages):([0-9a-f]{1,64})$/.exec(item)
+      const g = ghost()
+      if (!m || !g) throw new FilesError('not_found')
+      const resource = m[1] as 'posts' | 'pages'
+      const source = await g.getPost(resource, m[2]!).catch((err) => {
+        if (err instanceof GhostError && err.status === 404) throw new FilesError('not_found')
+        throw err
+      })
+      if ((source.tags ?? []).some((tg) => (tg.slug ?? '').startsWith('hash-lang-')) || readMarker(source.codeinjection_head)) throw new FilesError('is_translation')
+      const targets = languages().filter((l) => codes.includes(l.code))
+      const file = buildExport({
+        format: fmt,
+        id: source.id as string,
+        languageMap: languageMap(),
+        resource,
+        segments: collect(source).segments,
+        sourceLanguage: config.sourceLanguage,
+        targets,
+      })
+      log(`Exported ${resource} ${source.id} for ${targets.map((l) => l.code).join(', ')} as ${fmt} (${user.email})`)
+      report('onRequest')
+      res.writeHead(200, {
+        'Cache-Control': 'no-store',
+        'Content-Disposition': `attachment; filename="${file.filename}"`,
+        'Content-Type': file.contentType,
+        'X-Content-Type-Options': 'nosniff',
+      })
+      res.end(file.content)
+    } catch (err) {
+      if (!(err instanceof FilesError)) throw err
+      await renderFiles(req, res, user, { error: err.localized, selected }, err.status)
+    }
+  }
+
+  async function handleImport(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const user = await filesUser(req, res, true)
+    if (!user) return
+    const tooLarge = () => renderFiles(req, res, user, { error: new FilesError('too_large').localized }, 413)
+    // The form adds a few hundred bytes around the file: refuse anything clearly larger before reading.
+    if (Number(header(req, 'content-length') ?? 0) > MAX_UPLOAD_BYTES + 100_000) {
+      req.resume()
+      return tooLarge()
+    }
+    let raw: Buffer
+    try {
+      raw = await readRaw(req, MAX_UPLOAD_BYTES + 100_000)
+    } catch {
+      return tooLarge()
+    }
+    let form: FormData
+    try {
+      form = await new Request('http://connector/', { body: new Uint8Array(raw), headers: { 'content-type': header(req, 'content-type') ?? '' }, method: 'POST' }).formData()
+    } catch {
+      return renderFiles(req, res, user, { error: new FilesError('no_file').localized }, 400)
+    }
+    if (!csrf.verify(user.session, typeof form.get('csrf') === 'string' ? (form.get('csrf') as string) : null)) {
+      return send(res, 403, t(pickLocale(config.uiLanguage, header(req, 'accept-language')), 'page.mappingExpired'))
+    }
+    const upload = form.get('file')
+    if (!upload || typeof upload === 'string' || upload.size === 0) return renderFiles(req, res, user, { error: new FilesError('no_file').localized }, 400)
+    if (upload.size > MAX_UPLOAD_BYTES) return tooLarge()
+    const g = ghost()
+    if (!g) return renderFiles(req, res, user, { error: { key: 'page.noGhostKey' } }, 503)
+    const overwrite = form.get('overwrite') === '1'
+    const translator = new Translator({ ghost: g, languageMap: languageMap(), log, sourceLanguage: config.sourceLanguage, supertext })
+    try {
+      const jobsDone = await importFile(await upload.text(), {
+        includeChanged: form.get('includeChanged') === '1',
+        languages: languages(),
+        load: async (ref) => {
+          const post = await g.getPost(ref.resource, ref.id).catch((err) => {
+            if (err instanceof GhostError && err.status === 404) return null
+            throw err
+          })
+          if (!post || readMarker(post.codeinjection_head)) return null
+          return { segments: collect(post).segments, title: String(post.title ?? '') }
+        },
+        write: async (ref, language, translations) => {
+          const title = (await g.getPost(ref.resource, ref.id).catch(() => null))?.title
+          const job = jobs.start({ force: overwrite, language: language.code, languageLabel: language.label, postId: ref.id, postTitle: String(title ?? ''), resource: ref.resource })
+          const result = await translator.importTranslations(ref.resource, ref.id, language, overwrite, translations)
+          jobs.finish(job, result)
+          log(`#${job.id} import ${result.status}: ${result.message} (${user.email})`)
+          return result
+        },
+      })
+      report('onRequest')
+      await renderFiles(req, res, user, { jobs: jobsDone })
+    } catch (err) {
+      if (err instanceof FilesError || err instanceof TranslationFileError) {
+        const status = err.code === 'too_large' ? 413 : 400
+        return renderFiles(req, res, user, { error: { key: `files.error.${err.code}` as Localizable['key'] } }, status)
+      }
+      throw err
+    }
   }
 
   async function handleHealth(res: ServerResponse): Promise<void> {
@@ -314,6 +510,18 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
         }
         return handleSettings(req, res)
       }
+      if (path === FILES_PATH || path === `${FILES_PATH}/`) {
+        const user = await filesUser(req, res, false)
+        if (user) await renderFiles(req, res, user)
+        return
+      }
+      if (path === FILES_EXPORT_PATH || path === FILES_IMPORT_PATH) {
+        if (req.method !== 'POST') {
+          res.writeHead(303, { Location: FILES_PATH })
+          return void res.end()
+        }
+        return path === FILES_EXPORT_PATH ? handleExport(req, res) : handleImport(req, res)
+      }
       if (path === '/supertext' || path === '/supertext/') {
         res.writeHead(302, { Location: STATUS_PATH })
         return void res.end()
@@ -350,6 +558,28 @@ const header = (req: IncomingMessage, name: string) => {
 function send(res: ServerResponse, status: number, text: string): void {
   res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8' })
   res.end(text)
+}
+
+/** The request body as bytes, refused above `limit` (kept in memory only). */
+function readRaw(req: IncomingMessage, limit: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    let size = 0
+    let done = false
+    req.on('data', (c: Buffer) => {
+      if (done) return
+      size += c.length
+      if (size > limit) {
+        done = true
+        req.resume()
+        reject(new Error('Body too large'))
+      } else chunks.push(c)
+    })
+    req.on('end', () => {
+      if (!done) resolve(Buffer.concat(chunks))
+    })
+    req.on('error', reject)
+  })
 }
 
 function readBody(req: IncomingMessage, limit = 5_000_000): Promise<string> {

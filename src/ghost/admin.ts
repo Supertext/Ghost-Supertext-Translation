@@ -138,6 +138,16 @@ export class GhostAdmin {
     return data[resource] ?? []
   }
 
+  /** The latest posts or pages (for choosing one to export): id, title, status and the head with a translation's marker. */
+  async listPosts(resource: Resource, limit = 100): Promise<GhostPost[]> {
+    const data = await this.request<Record<Resource, GhostPost[]>>('GET', `${resource}/`, undefined, {
+      fields: 'id,title,status,codeinjection_head,updated_at',
+      limit: String(limit),
+      order: 'updated_at desc',
+    })
+    return data[resource] ?? []
+  }
+
   async addPost(resource: Resource, post: Record<string, unknown>): Promise<GhostPost> {
     const data = await this.request<Record<Resource, GhostPost[]>>('POST', `${resource}/`, { [resource]: [post] }, { formats: 'lexical' })
     return data[resource]![0]!

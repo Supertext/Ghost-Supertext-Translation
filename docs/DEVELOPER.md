@@ -14,9 +14,11 @@ The connector **never writes the source post**. Ghost rejects a save whose `upda
 src/
   index.ts           entry point: config, HTTP server, creates the request tags once Ghost is reachable
   config.ts          environment variables (+ optional settings file written by the demo)
-  server.ts          HTTP: /supertext/webhook, /supertext/health, /supertext/ping (public), /supertext/static/ (logo, favicon, fonts), /ghost/supertext/ (status page), POST /ghost/supertext/settings (language mapping), proxy to Ghost
+  server.ts          HTTP: /supertext/webhook, /supertext/health, /supertext/ping (public), /supertext/static/ (logo, favicon, fonts), /ghost/supertext/ (status page), POST /ghost/supertext/settings (language mapping), /ghost/supertext/files (+ POST …/export, …/import: translation files), proxy to Ghost
   reporting.ts       Commando Center: version reports, API key check, ping (Plugin Health's InstallationReporter), state in STATE_FILE
-  translate.ts       one source × one language: find existing translation, overwrite rules, translate, save
+  translate.ts       one source × one language: find existing translation, overwrite rules, translate (or apply imported translations), save
+  files.ts           translation files: XLIFF/HTML export and import on the SDK's TranslationFiles
+  files-page.ts      the translation files page (export form, import form, import summary)
   collect.ts         which fields, Lexical blocks and card properties are translated
   lexical.ts         Lexical inline nodes <-> inline HTML with data-n markers
   segments.ts        segment model, HTML document for Supertext, parsing the answer
@@ -69,6 +71,18 @@ One `<div data-st-id="N">` per segment (div, because card HTML such as toggle co
 ```
 
 Text formats become `b`, `i`, `u`, `s`, `code`, `sub`, `sup`, `mark`; links `a href`. Nothing is marked `translate="no"`: the live API then leaves stray «» quotes next to the element, while plain `<code>` already comes back untranslated (checked October 2026). `data-n` points to the original Lexical node, which is cloned when rebuilding, so formatting follows the words when the translator reorders them. Tags the translator invents or duplicates are dropped (their text kept). This follows the project rule: never one `data-st-id` per formatted run.
+
+### Translation files (`src/files.ts`)
+
+*Export for translation* / *Import translation* use the SDK's `TranslationFiles` (Supertext SDK 0.5.0, `src/vendor/supertext-sdk/translation-file.ts`, imported from the copy's root `index.ts`: no API call, no API key). The file is translated elsewhere and imported again.
+
+- **Where:** `/ghost/supertext/files` (`files-page.ts`, linked from the status page; setup A only). Staff session as for the status page; export and import need the Ghost role Owner, Administrator or Editor (`EDITOR_ROLES`: they may edit every post, and the connector writes with the integration's key), the page's CSRF token and a same-origin request.
+- **Segments:** `collect()` of the source, the same as a tag translation; key = the segment's `path` (`title`, `custom_excerpt`, `lexical.3.paragraph`, `lexical.5.image.caption` …). Plain-text segments (`textSegment`, which now also carries `text`) go as plain text, the others as their inline HTML.
+- **Reference:** `<post|page>:<Ghost id>:<language code>` (e.g. `post:65f1c0…:de-CH`, `formatReference`/`parseReference`); `plugin` = `Ghost-Supertext-Translation`; `sourceLanguage` = the source's Supertext code (mapping …), `targetLanguage` = the language's `target`, else the configured code with `_` → `-`.
+- **Export:** `POST /ghost/supertext/files/export` (form: `csrf`, `item=posts:<id>`, `format`, `target`…) → `Content-Type` `application/x-xliff+xml` / `text/html; charset=utf-8`, `Content-Disposition: attachment; filename="ghost-<id>-<code>.xlf"` (`ghost-<id>.xlf` for several languages). XLIFF: one job per language; HTML: exactly one. Translations themselves are refused (`is_translation`).
+- **Import:** `POST /ghost/supertext/files/import` (multipart: `csrf`, `file`, `includeChanged`, `overwrite`), refused above 10 MB (+ the form's overhead) by `Content-Length` before reading and while reading, parsed in memory with `Request.formData()`. `importFile()`: `TranslationFiles.read`; per job `plugin` must be ours (`other_system`), the reference must parse (`not_found`), the language must be configured (`no_language`), the source must exist and not be a translation (`not_found`); then `importTranslations(file, collect(current source))`. `ok` (and `source_changed` with *includeChanged*) go to `Translator.importTranslations()`; `untranslated`, `invalid_markup`, `missing` don't.
+- **Write-back:** `Translator.importTranslations()` is the tag translation's `run()` with the imported texts instead of Supertext's: the same overwrite rules (unchanged draft updated, edited/published kept unless `overwrite`, like `#retranslate-…`), new translations as drafts with the marker and `#lang-…`, segments without a translation keep the source (`job.partlyImported`). Each written job is also recorded in the job log (status page).
+- **Errors:** `FilesError` (`files.error.<code>`: `nothing_to_translate`, `no_targets`, `one_target`, `invalid_format`, `no_file`, `is_translation`, `not_found`, `other_system`, `no_language`, `too_large`) and the SDK's `TranslationFileError` (`invalid_file`, `missing_metadata`, `too_large`).
 
 ## Look and feel
 
@@ -162,6 +176,7 @@ GHOST_URL=… GHOST_ADMIN_API_KEY=… npm start
 - `test/languages.test.ts`: exact codes, the SDK defaults (`de` → `de-DE`, `zh-CN` → `zh-Hans`, `es-ES` → `es`) and what has none (`de-LI`, `gsw`, `sr-RS`), the mapping (targets and source), `SUPERTEXT_LANGUAGE_MAP` parsing, blocked/ignored tones.
 - `test/settings.test.ts`: the settings file (next to `STATE_FILE`, broken content, memory), the combo boxes' preselection (saved → suggestion → *— choose —*), the override, form validation, CSRF tokens, and the HTTP flow against a fake `users/me`: saving as Administrator, refusals without session, as Editor, without or with a forged token, cross-site and with an unknown code.
 - `test/reporting.test.ts`: ping address per setup, ping answers, state in `STATE_FILE` (also broken or unwritable), one `installed` report with the key check, Ghost version and ping address and never the key, `upgraded` only for a real version change, a 401 reported once, a missing key checked without a request, nothing sent with reports off, no exception when the center or Ghost fail, the status page's key check, setting, unmapped languages and tone warnings. Supertext is `fakeSupertext.ts`, the center a fake `fetch`; nothing reaches the live API or the center.
+- `test/files.test.ts`: translation files: reference round trip; export with the collected segments and paths, plain text as text, mapped and unmapped codes, HTML with one language; import through the Translator into a draft (`ok` written, `untranslated`/`invalid_markup`/`missing` keep the source, the source post never written), `source_changed` only with the option, edited translations kept unless forced, an unchanged HTML file writes the source, other plugin, unknown reference, unconfigured language, missing post, too large and invalid files; the HTTP flow (download headers, multipart import, summary, CSRF/cross-site/signed-out refusals, Authors refused).
 - `test/i18n.test.ts`: every catalog has the English keys with the same placeholders, tags and links; French non-breaking spaces; language choice; localized status page, errors and tag descriptions.
 
 The real Ghost round trip is covered by the demo container (below) and the screenshot script, which drive the actual UI.
@@ -264,7 +279,8 @@ Results don't store translated text: `TranslateResult.localized` / `Job.localize
 
 ## Known limitations / roadmap
 
-- No status page in setup B (standalone); results only in the log.
+- No status page in setup B (standalone); results only in the log, and no translation files page.
+- Translation files: one post or page per export (no bulk export yet). The docs have no screenshots of the translation files page yet (they come from the demo container; add them on the next screenshot run).
 - No *Test connection* button: the key is checked at startup, when it changes and after a rejected translation.
 - Without `STATE_FILE` the reporter's state is in memory, so every restart reports `installed` again and re-checks the key.
 - Request tags stay on the source; re-requesting means removing and re-adding the tag.

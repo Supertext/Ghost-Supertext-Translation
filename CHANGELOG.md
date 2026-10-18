@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- Export for translation (XLIFF 1.2 or HTML) and import of translated files; Supertext SDK 0.5.0. A *Translation files* page next to the status page (`/ghost/supertext/files`, Ghost Editors and Administrators): download a post's or page's text for one or more languages, have it translated in a translation tool, by a translator or in Supertext's web app, and import the file again as a draft translation, with the same overwrite rules as tags and a summary (imported, skipped because the source changed, untranslated, formatting changed, not in the file).
+
 - The status page in Supertext's look: deep-green header with the Supertext logo, warm off-white background, mint for finished translations, pill-shaped tags and buttons, the Inter font and the Supertext favicon. Logo, favicon and font are served by the connector itself at `/supertext/static/` (no font from a CDN) and work on phones.
 - French and Italian interface (and German where it was missing): the status page, its messages and the tag descriptions are available in English, German, French and Italian. The status page follows the browser's language; `UI_LANGUAGE` sets one language for everyone and for new tag descriptions.
 - The status page shows the connector version (linked to its GitHub release), and the startup log names it. Ghost has no plugin list, so this is where administrators see which version runs.
