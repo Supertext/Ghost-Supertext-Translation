@@ -7,6 +7,7 @@ For administrators. The Supertext connector is a small Node.js service next to y
 - Ghost **6** (self-hosted or Ghost(Pro)). Posts must use Ghost's current (Lexical) editor, which is the default since Ghost 5.
 - Node.js **20.9** or newer for the connector (or Docker).
 - A Supertext account with an API key ([create an account](https://www.supertext.com/person/en/account/signin); [generate the key](https://www.supertext.com/en/integrations/api) with the Admin role; see [API key](#api-key)).
+- The connector must reach `https://api.supertext.com` over HTTPS (and, for [Translation review](#translation-review), Supertext's review service).
 - The connector must be reachable by Ghost over the internet, or on your Ghost site's own host name (see [Choose a setup](#choose-a-setup)).
 - Ghost Administrator access, to create the integration.
 
@@ -125,6 +126,8 @@ The status page at `/ghost/supertext/` ([setup A](#a-in-front-of-ghost)) has a *
 
 ![The languages and Language mapping sections of the status page: one drop-down list per language, with the suggested Supertext language preselected](images/status-mapping.png)
 
+Next to each **target** language is a **Translation review** checkbox (off by default): see [Translation review](#translation-review). It is saved with the same **Save** button.
+
 - Every signed-in staff user sees the section; only Ghost **Owners and Administrators** can save it.
 - The choices are kept in `supertext-settings.json` next to `STATE_FILE` (or in `SUPERTEXT_SETTINGS_FILE`). Without either, they are kept in memory until the next restart, and the section says so.
 - `SUPERTEXT_LANGUAGE_MAP` stays available for automated setups and **wins**: a language it names is shown read-only with *Set by SUPERTEXT_LANGUAGE_MAP*. Format: `code=Supertext code`, separated by commas, e.g. `SUPERTEXT_LANGUAGE_MAP=de-LI=de-CH,zh=zh-Hant` (JSON such as `{"de":"de-CH"}` works too).
@@ -182,6 +185,21 @@ Language collections must come before `/`. Then add menu links to `/de-ch/` and 
 
 Ghost's **Publication language** (Settings → General) is one value for the whole site, so the `lang` attribute of every page stays the source language unless your theme sets it from the `#lang-…` tag.
 
+## Translation review
+
+With **Translation review**, people check the translations on the website itself and correct them there: customers or Supertext linguists open the original and the translated page side by side in Chrome with the *Supertext Localization Review* extension and fix texts in a side panel. Their corrections come back into Ghost.
+
+Turn it on per language on the status page ([setup A](#a-in-front-of-ghost)): **`/ghost/supertext/` → *Language mapping* → tick *Translation review* next to the language translated into → Save** (Ghost Owner or Administrator). Untick it to turn it off again; nothing else changes.
+
+- Translations into that language then go through Supertext's review service instead of directly to Supertext. It answers exactly like Supertext and passes everything on with your API key, so billing, languages, formal/informal and error messages stay the same.
+- The review service keeps every translation of your account. A text it has translated before gets the same translation again (without a new Supertext call), and once a reviewer has corrected it, the corrected text.
+- **Corrections arrive with the next translation:** after a review, translate the posts or pages again (`#retranslate-…` replaces a translation that was edited or published; `#translate-…` updates an untouched draft) to write the corrections into Ghost. As always, translating again overwrites manual changes in the translated texts.
+- Reviewers get a review link for your site from Supertext; nothing to set up in Ghost.
+- The review service works with keys of the **live** Supertext API. With `SUPERTEXT_API_URL` pointing at staging or testing, leave review off.
+- *Export for translation* and *Import translation* don't use the review service. The automatic API key check and the version reports still go directly to Supertext.
+- `SUPERTEXT_REVIEW_URL` sets another review service (only when Supertext gives you another address); set it empty (or `off`) to turn review off for every language: the checkboxes are then disabled. The status page's **Connection** section shows the review service in use.
+- Setup B (standalone) has no status page and therefore no Translation review.
+
 ## Translation files
 
 The status page links to **Translation files** (`/ghost/supertext/files`, setup A only): *Export for translation* (XLIFF 1.2 or HTML) and *Import translation* ([user guide](USER_GUIDE.md#translate-with-a-file-xliff-or-html)). Nothing to configure, and no Supertext API key needed (no API call). It needs a signed-in Ghost staff session with the **Owner, Administrator or Editor** role (they may edit every post; the connector writes with the integration's key), the page's CSRF token and a same-origin request. Uploads are limited to **10 MB** (refused before reading), parsed in memory and never stored. Imported translations are saved as drafts like tag translations, with the same overwrite rules.
@@ -196,11 +214,12 @@ The status page links to **Translation files** (`/ghost/supertext/files`, setup 
 | `GHOST_SETTINGS_FILE` | — | JSON file with `adminKey` and `webhookSecret`, used when the variables above are empty; re-read when it changes (the demo writes it). |
 | `GHOST_UPSTREAM` | — | Setup A: Ghost's internal address, e.g. `http://127.0.0.1:2368`. Enables the proxy and the status page. |
 | `SUPERTEXT_API_KEY` | — | Your Supertext API key, generated at [supertext.com → Integrations → API](https://www.supertext.com/en/integrations/api) (Admin role). |
-| `SUPERTEXT_API_URL` | `https://api.supertext.com/v1/` | Supertext API endpoint. |
+| `SUPERTEXT_API_URL` | `https://api.supertext.com/v1/` | Supertext API endpoint. For [Translation review](#translation-review) use the status page's checkboxes instead. |
+| `SUPERTEXT_REVIEW_URL` | Supertext's review service (`https://localizationreview-production.up.railway.app/v1/`) | Address of the review service for languages with *Translation review* on. Empty (or `off`, `0`, `false`, `no`) turns review off for every language. Only change it when Supertext gives you another address. |
 | `SOURCE_LANGUAGE` | `en` | Language of the originals. Sent to Supertext without region (`en-GB` → `en`). |
 | `TARGET_LANGUAGES` | `de-CH,fr-CH` | Target languages, comma-separated. Each is a Supertext code, has a default (`de` → `de-DE`) or is mapped on the status page or in `SUPERTEXT_LANGUAGE_MAP` (see [Language setup](#language-setup)). |
 | `SUPERTEXT_LANGUAGE_MAP` | — | Optional override of the status page's *Language mapping*: your code → Supertext code, e.g. `de=de-CH,zh=zh-Hant` (or JSON `{"de":"de-CH"}`). The languages it names can't be changed on the status page. Needed in setup B for codes without a default. |
-| `SUPERTEXT_SETTINGS_FILE` | `supertext-settings.json` next to `STATE_FILE` | JSON file for the language mapping chosen on the status page. Without it and without `STATE_FILE` the mapping is kept in memory only. |
+| `SUPERTEXT_SETTINGS_FILE` | `supertext-settings.json` next to `STATE_FILE` | JSON file for the language mapping and *Translation review* chosen on the status page (`languageCodes`, `review`). Without it and without `STATE_FILE` the mapping is kept in memory only. |
 | `SUPERTEXT_POLITENESS` | `default` | Formal or informal address: `more` (formal, e.g. *Sie*/*vous*), `less` or `default`, for all languages, or per language: `de-CH=more,fr-CH=less`. |
 | `PORT` / `HOST` | `8080` / `0.0.0.0` | Where the connector listens. |
 | `JOBS_FILE` | — | JSON file to keep the status page's history across restarts. |
@@ -209,7 +228,7 @@ The status page links to **Translation files** (`/ghost/supertext/files`, setup 
 | `STATE_FILE` | — | JSON file for what was last reported to Supertext and the latest API key check. Without it this is kept in memory, so after each restart the key is checked again and the installation is reported as new. |
 | `UI_LANGUAGE` | `auto` | Language of the status page and of the tag descriptions: `en`, `de`, `fr`, `it`, or `auto` (see *Interface languages*). |
 
-Changing `TARGET_LANGUAGES` or `SUPERTEXT_LANGUAGE_MAP` needs a restart; the status page's *Language mapping* applies right away.
+Changing `TARGET_LANGUAGES`, `SUPERTEXT_LANGUAGE_MAP` or `SUPERTEXT_REVIEW_URL` needs a restart; the status page's *Language mapping* and *Translation review* apply right away.
 
 ### Version information and the API key check
 
@@ -258,5 +277,8 @@ Translations stay normal Ghost posts. Each carries an invisible HTML comment in 
 | "Supertext offers no formal or informal tone for this language" | `SUPERTEXT_POLITENESS` sets `more`/`less` for a language without it (English, Swiss German, Romansh, Albanian, Serbian); remove that entry and restart. |
 | "Supertext rejected the API key" on the status page | The key is wrong or revoked. Check that the whole key is in `SUPERTEXT_API_KEY`, or generate a new one at [supertext.com → Integrations → API](https://www.supertext.com/en/integrations/api) (Admin role). No Supertext account yet? [Create one](https://www.supertext.com/person/en/account/signin). Restart the connector; it checks the new key. |
 | "The API key couldn't be checked because Supertext can't be reached" | The connector can't reach `api.supertext.com` (firewall, proxy, DNS). Translations need the same connection. |
+| "Authentication failure" only for languages with *Translation review* | The review service only works with keys of the live Supertext API: with `SUPERTEXT_API_URL` on staging/testing leave review off. |
+| Reviewers' corrections don't show up in Ghost | They arrive with the next translation: translate the posts into that language again (`#retranslate-…` if the translation was edited or published). Check that *Translation review* is ticked for that language on the status page. |
+| *Translation review* checkboxes are disabled | `SUPERTEXT_REVIEW_URL` is empty or `off` (review off everywhere), or you're not a Ghost Owner or Administrator. |
 | "Too many requests" | Supertext's per-second limit. The connector retries four times; translating fewer languages at once helps. |
 | "No content in Ghost's current editor format" | The post was written in Ghost's legacy editor; open and save it once to convert it. |

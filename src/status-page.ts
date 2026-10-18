@@ -2,7 +2,7 @@ import { format, languageLabel, type MessageKey, type Params, t, type UiLocale }
 import type { Job } from './jobs.js'
 import { type Language, RETRANSLATE_ALL_TAG, TRANSLATE_ALL_TAG } from './languages.js'
 import { escapeHtml as e } from './segments.js'
-import { fieldName, type MappingRow } from './settings.js'
+import { fieldName, type MappingRow, reviewFieldName } from './settings.js'
 import { API_KEY_URL, SIGNUP_URL } from './supertext/client.js'
 import type { KeyCheck } from './vendor/supertext-plugin-health/index.js'
 import { fontFaces, staticUrl } from './static.js'
@@ -13,7 +13,8 @@ export type StatusPageData = {
   siteUrl: string
   siteTitle: string
   ghost: { ok: boolean; detail: string }
-  supertext: { endpoint: string; keyConfigured: boolean }
+  /** `reviewEndpoint`: the review service for languages with *Translation review* on ('' = off). */
+  supertext: { endpoint: string; keyConfigured: boolean; reviewEndpoint?: string }
   webhookSecret: boolean
   sourceLanguage: string
   /** The Supertext code the source language is sent as; null when it isn't mapped. */
@@ -33,6 +34,8 @@ export type StatusPageData = {
     persistent: boolean
     /** Just saved: to the file, or only in memory. */
     saved: 'saved' | 'memory' | null
+    /** A review service is set (`SUPERTEXT_REVIEW_URL` not empty): the *Translation review* checkboxes can be used. */
+    reviewAvailable?: boolean
   }
   viewer: string
   /** The translation files page (Export for translation / Import translation); absent outside proxy mode. */
@@ -87,7 +90,13 @@ function mappingHtml(d: StatusPageData, m: NonNullable<StatusPageData['mapping']
       : r.selected === ''
         ? `<span class="bad">${L('page.mappingNone')}</span>`
         : ''
-    return `<tr><td><label for="${id}">${e(languageLabel(r.code, d.locale))}</label> ${tag(r.code)}<br><span class="muted">${L(r.role === 'source' ? 'page.mappingSource' : 'page.mappingTarget')}</span></td><td><select id="${id}" name="${e(fieldName(r.code))}"${disabled}>${choose}${unknown}${opts}</select>${note ? `<br>${note}` : ''}</td></tr>`
+    // Translation review only for translations into a language: no checkbox for the source.
+    const reviewDisabled = !m.canEdit || m.reviewAvailable === false ? ' disabled' : ''
+    const review =
+      r.role === 'target'
+        ? `<label class="check"><input type="checkbox" id="${id}-review" name="${e(reviewFieldName(r.code))}" value="1"${r.review ? ' checked' : ''}${reviewDisabled}> ${L('page.reviewLabel')}</label>`
+        : ''
+    return `<tr><td><label for="${id}">${e(languageLabel(r.code, d.locale))}</label> ${tag(r.code)}<br><span class="muted">${L(r.role === 'source' ? 'page.mappingSource' : 'page.mappingTarget')}</span></td><td><select id="${id}" name="${e(fieldName(r.code))}"${disabled}>${choose}${unknown}${opts}</select>${note ? `<br>${note}` : ''}</td><td>${review}</td></tr>`
   }
   const saved = m.saved === 'saved' ? `<p class="ok" role="status">${L('page.mappingSaved')}</p>` : m.saved === 'memory' ? `<p class="bad" role="status">${L('page.mappingMemory')}</p>` : ''
   return `<section id="mapping">
@@ -97,9 +106,10 @@ function mappingHtml(d: StatusPageData, m: NonNullable<StatusPageData['mapping']
   ${m.persistent ? '' : `<p class="muted">${L('page.mappingNotPersistent')}</p>`}
   <form method="post" action="${e(m.formAction)}">
   <input type="hidden" name="csrf" value="${e(m.csrf)}">
-  <div class="table-scroll"><table class="mapping"><thead><tr><th>${L('page.mappingColLanguage')}</th><th>${L('page.mappingColSupertext')}</th></tr></thead><tbody>
+  <div class="table-scroll"><table class="mapping"><thead><tr><th>${L('page.mappingColLanguage')}</th><th>${L('page.mappingColSupertext')}</th><th>${L('page.reviewLabel')}</th></tr></thead><tbody>
 ${m.rows.map(row).join('\n')}
   </tbody></table></div>
+  <p class="muted"><strong>${L('page.reviewLabel')}:</strong> ${L('page.reviewHelp')}${m.reviewAvailable === false ? ` <span class="bad">${L('page.reviewOff')}</span>` : ''}</p>
   ${m.canEdit ? `<p><button type="submit">${L('page.mappingSave')}</button></p>` : `<p class="muted">${L('page.mappingAdminOnly')}</p>`}
   </form>
 </section>`
@@ -125,6 +135,8 @@ select:focus-visible,button:focus-visible{outline:3px solid var(--mint);outline-
 button{font:inherit;font-weight:600;color:var(--text);background:var(--mint);border:0;border-radius:999px;padding:9px 22px;min-height:40px;cursor:pointer}
 button:hover{background:var(--mint-hover)}
 table.mapping td{vertical-align:middle}
+label.check{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;cursor:pointer}
+label.check input{width:18px;height:18px;margin:0;accent-color:var(--text)}
 a:focus-visible{outline:3px solid var(--mint);outline-offset:2px;border-radius:4px}
 header a.back:focus-visible{border-radius:999px}
 main{max-width:1060px;margin:0 auto;padding:28px 32px 48px;display:grid;gap:20px}
@@ -249,6 +261,7 @@ ${d.mapping ? mappingHtml(d, d.mapping) : ''}
   <h2>${L('page.connectionTitle')}</h2>
   <dl>
     <dt>${L('page.supertextApi')}</dt><dd>${e(d.supertext.endpoint)}</dd>
+    ${d.supertext.reviewEndpoint !== undefined ? `<dt>${L('page.reviewService')}</dt><dd>${d.supertext.reviewEndpoint ? e(d.supertext.reviewEndpoint) : `<span class="muted">${L('page.reviewOff')}</span>`}</dd>` : ''}
     <dt>${L('page.apiKey')}</dt><dd>${d.supertext.keyConfigured ? `<span class="ok">${L('page.configured')}</span>` : `<span class="bad">${L('page.missing')}</span> ${L('page.missingKeyHint')}`}<br><span class="muted">${L('page.keyHelp', { apiKeyUrl: API_KEY_URL, signupUrl: SIGNUP_URL })}</span></dd>
     <dt>${L('page.keyCheck')}</dt><dd>${keyCheckHtml(d, d.reports?.check)}</dd>
     <dt>${L('page.ghost')}</dt><dd>${d.ghost.ok ? `<span class="ok">${L('page.connected')}</span> ${e(d.ghost.detail)}` : `<span class="bad">${L('page.notConnected')}</span> — ${e(d.ghost.detail)}`}</dd>

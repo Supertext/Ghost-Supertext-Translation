@@ -1,6 +1,6 @@
 /**
  * Settings an administrator changes on the status page: the language mapping (one combo box per
- * language). Kept as a small JSON file next to the Commando Center state (`SUPERTEXT_SETTINGS_FILE`,
+ * language) and *Translation review* (one checkbox per target language). Kept as a small JSON file next to the Commando Center state (`SUPERTEXT_SETTINGS_FILE`,
  * else `supertext-settings.json` in the folder of `STATE_FILE`), in memory without one.
  *
  * `SUPERTEXT_LANGUAGE_MAP` stays an override for automated setups: a language it maps can't be
@@ -15,6 +15,8 @@ import { Languages, type LanguageMapping } from './vendor/supertext-sdk/v1/index
 export type ConnectorSettings = {
   /** Configured language code → Supertext code, chosen on the status page. */
   languageCodes: Record<string, string>
+  /** Configured target codes with *Translation review* on (Supertext's review service). Absent: none. */
+  review?: string[]
 }
 
 const EMPTY: ConnectorSettings = { languageCodes: {} }
@@ -29,10 +31,13 @@ function parse(raw: string): ConnectorSettings {
   const json = JSON.parse(raw) as unknown
   if (!json || typeof json !== 'object') return EMPTY
   const codes = (json as { languageCodes?: unknown }).languageCodes
-  if (!codes || typeof codes !== 'object' || Array.isArray(codes)) return EMPTY
-  return {
-    languageCodes: Object.fromEntries(Object.entries(codes).filter((e): e is [string, string] => typeof e[1] === 'string' && e[1].trim() !== '')),
-  }
+  const review = (json as { review?: unknown }).review
+  const reviewCodes = Array.isArray(review) ? review.filter((c): c is string => typeof c === 'string' && c.trim() !== '') : []
+  const languageCodes =
+    codes && typeof codes === 'object' && !Array.isArray(codes)
+      ? Object.fromEntries(Object.entries(codes).filter((e): e is [string, string] => typeof e[1] === 'string' && e[1].trim() !== ''))
+      : {}
+  return reviewCodes.length ? { languageCodes, review: reviewCodes } : { languageCodes }
 }
 
 export class SettingsStore {
@@ -89,6 +94,11 @@ export function effectiveMapping(saved: Record<string, string>, override: Langua
   return out
 }
 
+/** Whether *Translation review* is on for `code` (a configured target language). */
+export function reviewOn(code: string, saved: ConnectorSettings): boolean {
+  return (saved.review ?? []).some((c) => key(c) === key(code))
+}
+
 export type MappingRow = {
   /** Configured code (`SOURCE_LANGUAGE` or an entry of `TARGET_LANGUAGES`). */
   code: string
@@ -97,10 +107,18 @@ export type MappingRow = {
   selected: string
   /** Set by `SUPERTEXT_LANGUAGE_MAP`: the combo box is read-only. */
   overridden: boolean
+  /** *Translation review* for this target language (always false for the source). */
+  review: boolean
 }
 
 /** One row per configured language, the source first (one mapping serves both directions). */
-export function mappingRows(sourceLanguage: string, targetCodes: string[], saved: Record<string, string>, override: LanguageMapping): MappingRow[] {
+export function mappingRows(
+  sourceLanguage: string,
+  targetCodes: string[],
+  saved: Record<string, string>,
+  override: LanguageMapping,
+  review: string[] = [],
+): MappingRow[] {
   const seen = new Set<string>()
   const rows: MappingRow[] = []
   const add = (code: string, role: MappingRow['role']) => {
@@ -108,7 +126,8 @@ export function mappingRows(sourceLanguage: string, targetCodes: string[], saved
     seen.add(key(code))
     const forced = overrideFor(code, override)
     const own = Object.entries(saved).find(([from]) => key(from) === key(code))?.[1] ?? null
-    rows.push({ code, overridden: forced !== null, role, selected: forced ?? own ?? Languages.suggestTarget(code) ?? '' })
+    const reviewed = role === 'target' && review.some((c) => key(c) === key(code))
+    rows.push({ code, overridden: forced !== null, review: reviewed, role, selected: forced ?? own ?? Languages.suggestTarget(code) ?? '' })
   }
   add(sourceLanguage, 'source')
   for (const code of targetCodes) add(code, 'target')
@@ -117,6 +136,14 @@ export function mappingRows(sourceLanguage: string, targetCodes: string[], saved
 
 /** Form field of a row's combo box. */
 export const fieldName = (code: string) => `code:${key(code)}`
+
+/** Form field of a target row's *Translation review* checkbox (value `1` when ticked). */
+export const reviewFieldName = (code: string) => `review:${key(code)}`
+
+/** The ticked *Translation review* checkboxes → the configured target codes with review on. */
+export function readReviewForm(form: URLSearchParams, rows: MappingRow[]): string[] {
+  return rows.filter((r) => r.role === 'target' && form.get(reviewFieldName(r.code)) === '1').map((r) => r.code)
+}
 
 /**
  * The submitted combo boxes → the saved mapping. Only the configured languages are read,

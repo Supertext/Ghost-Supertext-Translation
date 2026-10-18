@@ -19,6 +19,7 @@ import {
   SupertextError as SdkError,
   type FetchLike,
 } from '../vendor/supertext-sdk/v1/index.js'
+import { USER_AGENT } from '../version.js'
 
 /** Where administrators log in to or create a Supertext account. */
 export const SIGNUP_URL = 'https://www.supertext.com/person/en/account/signin'
@@ -31,6 +32,14 @@ export const SUPERTEXT_ENVIRONMENTS = {
   staging: 'https://api.staging.supertext.com/v1/',
   testing: 'https://api.testing.supertext.com/v1/',
 } as const
+
+/**
+ * Supertext's review service (the translation proxy of Supertext Localization Review). It speaks
+ * the same API v1 and forwards to the live Supertext API with the connector's key, keeping every
+ * translation so reviewers can correct them on the website. Used for target languages with
+ * *Translation review* on (status page → Language mapping); `SUPERTEXT_REVIEW_URL` replaces it.
+ */
+export const REVIEW_URL = 'https://localizationreview-production.up.railway.app/v1/'
 
 export type SupertextEnvironment = keyof typeof SUPERTEXT_ENVIRONMENTS
 
@@ -87,6 +96,8 @@ export type SupertextClientOptions = {
   requestTimeoutMs?: number
   /** Sleep implementation (tests). */
   sleep?: (ms: number) => Promise<void>
+  /** Review service for languages with *Translation review* on ('' or absent: review off; the API's own URL: no second client). */
+  reviewUrl?: string
 }
 
 export type TranslateFileArgs = {
@@ -117,20 +128,40 @@ export function fromSdkError(error: SdkError): SupertextError {
   return new SupertextError(code, { detail, params, status: error.status })
 }
 
+const sameUrl = (a: string, b: string) => a.trim().replace(/\/+$/, '') === b.trim().replace(/\/+$/, '')
+
 export class SupertextClient {
   private readonly sdk: SdkClient
+  /** Builds the client for the review service; null when review is off (no URL, or the API's own). */
+  private readonly makeReviewClient: (() => SupertextClient) | null
+  private reviewClient: SupertextClient | null = null
 
   constructor(options: SupertextClientOptions) {
     const pollIntervalMs = Math.max(100, options.pollIntervalMs ?? 2000)
+    const baseUrl = options.baseUrl ?? SUPERTEXT_ENVIRONMENTS.live
     this.sdk = new SdkClient(options.apiKey, {
-      baseUrl: options.baseUrl ?? SUPERTEXT_ENVIRONMENTS.live,
+      baseUrl,
       pollIntervalMs,
       timeoutMs: Math.max(pollIntervalMs, options.timeoutMs ?? 180_000),
       requestTimeoutMs: options.requestTimeoutMs ?? 30_000,
-      userAgent: 'ghost-supertext-translation',
+      // The connector's version too, so Supertext and the review service see which release calls.
+      userAgent: USER_AGENT,
       ...(options.fetch ? { fetch: options.fetch as FetchLike } : {}),
       ...(options.sleep ? { sleep: options.sleep } : {}),
     })
+    const reviewUrl = (options.reviewUrl ?? '').trim()
+    this.makeReviewClient =
+      reviewUrl === '' || sameUrl(reviewUrl, baseUrl) ? null : () => new SupertextClient({ ...options, baseUrl: reviewUrl, reviewUrl: '' })
+  }
+
+  /**
+   * The client for a target language: the review service (same key, timeouts and transport, created
+   * once) when its *Translation review* is on, else this one. Without a review URL, always this one.
+   * A job is collected by the client that submitted it (`translateHtml` is one round trip).
+   */
+  forReview(review: boolean): SupertextClient {
+    if (!review || !this.makeReviewClient) return this
+    return (this.reviewClient ??= this.makeReviewClient())
   }
 
   /** Full round trip: upload, wait, download, delete. Returns the translated HTML. */

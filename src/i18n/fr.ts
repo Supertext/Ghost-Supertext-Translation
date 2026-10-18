@@ -76,6 +76,10 @@ export const fr: Messages = {
   'page.mappingCrossSite': 'Requête refusée : le formulaire n’a pas été envoyé depuis la page d’état.',
   'page.mappingInvalid': 'Ce n’est pas un code de langue Supertext. Choisissez-en un dans la liste.',
   'page.mappingTooLarge': 'La requête est trop volumineuse.',
+  'page.reviewLabel': 'Révision des traductions',
+  'page.reviewHelp': 'Les traductions vers cette langue passent par le service de révision de Supertext, afin que les réviseurs puissent les vérifier et les corriger directement sur le site avec l’extension Supertext Localization Review. Leurs corrections sont reprises lors de la prochaine traduction de l’article ou de la page.',
+  'page.reviewOff': 'Désactivée pour toutes les langues : SUPERTEXT_REVIEW_URL est vide.',
+  'page.reviewService': 'Service de révision',
 
   'status.created': 'Créé',
   'status.failed': 'Échec',

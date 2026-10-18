@@ -18,6 +18,7 @@ Ghost has no plugin system for its admin, so this is a small **connector service
 - Translates the title, excerpt, SEO and social fields, feature image alt text and caption, every paragraph, heading, list and quote, and the text in cards (images, galleries, callouts, toggles, buttons, headers, signup, call-to-action, product, embeds, video, audio, files).
 - One translation per language, linked to its source. Drafts that nobody touched are updated in place; edited or published translations are only replaced on request.
 - Status page for staff at `/ghost/supertext/` when the connector runs in front of Ghost, with *Export for translation* / *Import translation*: XLIFF 1.2 or HTML files for translation tools, translators or Supertext's web app.
+- *Translation review* per language (status page → *Language mapping*): translations go through Supertext's review service, where reviewers correct them on the website; corrections come back with the next translation ([details](docs/INSTALLATION.md#translation-review)).
 - Demo: Ghost + connector in one Docker image (`demo/`), deployed on Railway.
 
 ## Quick start (Docker)

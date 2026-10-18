@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { Config } from '../src/config.js'
 import { parseTargetLanguages } from '../src/languages.js'
 import { createApp } from '../src/server.js'
-import { CsrfTokens, effectiveMapping, fieldName, mappingRows, readMappingForm, SettingsStore, settingsPath } from '../src/settings.js'
+import { CsrfTokens, effectiveMapping, fieldName, mappingRows, readMappingForm, readReviewForm, reviewFieldName, reviewOn, SettingsStore, settingsPath } from '../src/settings.js'
 
 describe('settings file', () => {
   it('lives next to STATE_FILE unless SUPERTEXT_SETTINGS_FILE names one', () => {
@@ -27,6 +27,8 @@ describe('settings file', () => {
     expect(store.load()).toEqual({ languageCodes: { fr: 'fr-CH' } })
     writeFileSync(file, '{broken')
     expect(new SettingsStore(file).load()).toEqual({ languageCodes: {} })
+    writeFileSync(file, '{"languageCodes":{},"review":["de-CH",3,""]}')
+    expect(new SettingsStore(file).load()).toEqual({ languageCodes: {}, review: ['de-CH'] })
   })
 
   it('keeps the mapping in memory without a file', () => {
@@ -62,6 +64,20 @@ describe('mapping rows', () => {
     expect(readMappingForm(form({ [fieldName('de-LI')]: '<script>' }), rows)).toBeNull()
   })
 
+  it('reads Translation review per target language, never for the source; off by default', () => {
+    const rows = mappingRows('en', ['de', 'fr-CH'], {}, {}, ['DE'])
+    expect(rows.map((r) => [r.code, r.review])).toEqual([
+      ['en', false],
+      ['de', true],
+      ['fr-CH', false],
+    ])
+    expect(mappingRows('en', ['de'], {}, {}).every((r) => !r.review)).toBe(true)
+    const form = new URLSearchParams({ [reviewFieldName('en')]: '1', [reviewFieldName('fr-CH')]: '1', [reviewFieldName('de')]: 'yes' })
+    expect(readReviewForm(form, rows)).toEqual(['fr-CH'])
+    expect(reviewOn('de-ch', { languageCodes: {}, review: ['de-CH'] })).toBe(true)
+    expect(reviewOn('de-ch', { languageCodes: {} })).toBe(false)
+  })
+
   it('binds CSRF tokens to the session', () => {
     const csrf = new CsrfTokens()
     expect(csrf.verify('a', csrf.token('a'))).toBe(true)
@@ -76,7 +92,7 @@ describe('language mapping form on the status page', () => {
     for (const s of servers.splice(0)) s.close()
   })
 
-  async function start(role: string) {
+  async function start(role: string, extra: Partial<Config> = {}) {
     const dir = mkdtempSync(join(tmpdir(), 'st-app-'))
     const config: Config = {
       connectorSettingsFile: join(dir, 'supertext-settings.json'),
@@ -96,6 +112,7 @@ describe('language mapping form on the status page', () => {
       uiLanguage: 'en',
       upstream: 'http://ghost.test',
       versionReports: false,
+      ...extra,
     }
     // Ghost's users/me: only a request with the staff session cookie is signed in.
     const fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
@@ -134,12 +151,41 @@ describe('language mapping form on the status page', () => {
     const res = await post(base, { csrf: csrfOf(html), 'code:de': 'de-AT', 'code:de-li': 'de-CH', 'code:fr': 'fr-FR' })
     expect(res.status).toBe(303)
     expect(res.headers.get('location')).toBe('/ghost/supertext/?saved=1#mapping')
-    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ languageCodes: { de: 'de-AT', 'de-LI': 'de-CH' } })
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ languageCodes: { de: 'de-AT', 'de-LI': 'de-CH' }, review: [] })
     expect(app.languages().map((l) => [l.code, l.target])).toEqual([
       ['de', 'de-AT'],
       ['de-LI', 'de-CH'],
       ['fr', 'fr-CH'],
     ])
+  })
+
+  it('shows a Translation review checkbox per target language and saves it (off by default)', async () => {
+    const { app, base, file } = await start('Administrator')
+    const html = await (await fetch(`${base}/ghost/supertext/`, { headers: cookie })).text()
+    expect(html).toContain('<th>Translation review</th>')
+    expect(html).toContain('<input type="checkbox" id="map-de-review" name="review:de" value="1"> Translation review</label>')
+    expect(html).not.toContain('name="review:en"')
+    expect(html).toContain('https://localizationreview-production.up.railway.app/v1/')
+    expect(app.languages().every((l) => !l.review)).toBe(true)
+
+    await post(base, { csrf: csrfOf(html), 'code:de': 'de-DE', 'review:de-li': '1', 'code:de-li': 'de-CH' })
+    expect(JSON.parse(readFileSync(file, 'utf8')).review).toEqual(['de-LI'])
+    expect(app.languages().map((l) => [l.code, l.review])).toEqual([
+      ['de', false],
+      ['de-LI', true],
+      ['fr', false],
+    ])
+    const after = await (await fetch(`${base}/ghost/supertext/`, { headers: cookie })).text()
+    expect(after).toContain('name="review:de-li" value="1" checked>')
+  })
+
+  it('turns Translation review off everywhere when SUPERTEXT_REVIEW_URL is empty', async () => {
+    const { app, base } = await start('Administrator', { supertextReviewUrl: '' })
+    const html = await (await fetch(`${base}/ghost/supertext/`, { headers: cookie })).text()
+    expect(html).toContain('name="review:de" value="1" disabled>')
+    expect(html).toContain('Off for every language: SUPERTEXT_REVIEW_URL is empty.')
+    await post(base, { csrf: csrfOf(html), 'review:de': '1' })
+    expect(app.languages().every((l) => !l.review)).toBe(true)
   })
 
   it('refuses requests without a session, from non-administrators, without the token, cross-site or with a wrong code', async () => {

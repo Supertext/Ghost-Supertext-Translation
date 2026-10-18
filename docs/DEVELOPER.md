@@ -23,7 +23,7 @@ src/
   lexical.ts         Lexical inline nodes <-> inline HTML with data-n markers
   segments.ts        segment model, HTML document for Supertext, parsing the answer
   languages.ts       target languages, Supertext codes (mapping → exact → SDK default), tag names, added tags → requests
-  settings.ts        status page settings: the language mapping (one combo box per language), its JSON file, form validation, CSRF tokens
+  settings.ts        status page settings: the language mapping (one combo box per language) and Translation review (one checkbox per target language), its JSON file, form validation, CSRF tokens
   jobs.ts            recent requests for the status page (memory, optional JSON file)
   status-page.ts     status page HTML (inline CSS, see *Look and feel*)
   static.ts          the files of public/ served at /supertext/static/ (fixed list, cached for a year, URLs carry ?v=<version>)
@@ -31,7 +31,7 @@ src/
   version.ts         connector version, read once from package.json (status page, startup log)
   ghost/admin.ts     Admin API client (JWT from the integration key)
   ghost/webhook.ts   signature check and payload parsing
-  supertext/client.ts wrapper around the Supertext SDK: localized errors, environments, API key links
+  supertext/client.ts wrapper around the Supertext SDK: localized errors, environments, API key links; forReview() for Translation review
   vendor/supertext-sdk/ copy of the Supertext SDK (TypeScript sources, API in v1/; never edit, see *Supertext SDK*)
   vendor/supertext-plugin-health/ copy of Supertext Plugin Health (TypeScript sources; never edit, see *Supertext Plugin Health*)
 public/               supertext-logo.svg, favicon.svg, fonts/ (Inter, SIL Open Font License) for the connector's pages
@@ -104,9 +104,13 @@ Header `Authorization: Supertext-Auth-Key <key>` (a pasted prefix is stripped). 
 The client (protocol, retries, the language list, the error codes) and the API key check (`checkApiKey()`, `apiKeyFingerprint`, `SDK_VERSION`) come from the official Supertext SDK ([Supertext/Supertext-API-SDK-and-Guide](https://github.com/Supertext/Supertext-API-SDK-and-Guide), TypeScript, 0.3.0); version reports and the ping are in *Supertext Plugin Health* (below). Its sources are copied into `src/vendor/supertext-sdk/` and compiled with the connector, so sites install nothing extra; `COMMIT` and `VERSION` there name the SDK revision. Everything that talks to the API is in the `v1/` folder (`import … from './vendor/supertext-sdk/v1/index.js'`); the top-level `index.ts` only re-exports it as `v1` with `SDK_VERSION`. The vendor script copies the whole tree.
 
 - Never edit `src/vendor/`. Fix the SDK in its repo, then update the copy with `scripts/vendor-sdk.sh [ref]` (default: `main`; `SDK_DIR=/path/to/clone` uses a local clone) and run the tests.
-- `src/supertext/client.ts` wraps the SDK client: it keeps the connector's options (`baseUrl`, `pollIntervalMs`, `timeoutMs`, `fetch`, `sleep`) and turns every SDK error (`SupertextError.code`, e.g. `invalid_language_pair`) into the connector's `SupertextError`, whose message is the key `error.<code>` in `src/i18n/` with parameters (API key links, HTTP status, language pair) plus the API's own detail.
+- `src/supertext/client.ts` wraps the SDK client: it keeps the connector's options (`baseUrl`, `pollIntervalMs`, `timeoutMs`, `fetch`, `sleep`, `reviewUrl`), sends the User-Agent `supertext-sdk-ts Ghost-Supertext-Translation/<version>` (`USER_AGENT` in `src/version.ts`, the version from `package.json` as in the reports; the key check uses the same) and turns every SDK error (`SupertextError.code`, e.g. `invalid_language_pair`) into the connector's `SupertextError`, whose message is the key `error.<code>` in `src/i18n/` with parameters (API key links, HTTP status, language pair) plus the API's own detail.
 - Every SDK error code needs an `error.<code>` string in all four languages; `npm run typecheck` fails otherwise.
 - Even once the SDK is published on npm, the connector keeps bundling its copy.
+
+### Translation review
+
+Target languages with *Translation review* on (status page → *Language mapping*, `review` in the settings file) go through Supertext's review service, the translation proxy of [Supertext Localization Review](https://github.com/Supertext/Localization-Review-Supertext-Translation). `createApp()` gives the client `reviewUrl` (`SUPERTEXT_REVIEW_URL`, read by `reviewUrl()` in `src/config.ts`: unset = `REVIEW_URL` in `src/supertext/client.ts`, empty or `off` = review off everywhere); `app.languages()` sets `Language.review` from the saved list (never while the review URL is empty), and `Translator` calls `supertext.forReview(language.review)`. `forReview(true)` returns a second SDK client with the same key, timeouts, `fetch` and User-Agent whose base URL is the review URL, created once; without a review URL, or with the API's own URL, it returns the direct client. `translateHtml()` is one round trip on one client, so a job is always collected (status, download, delete) by the client that submitted it. The proxy speaks the same API v1, forwards to the live Supertext API with the connector's key, stores every segment per key and serves reviewers' corrections on the next upload, so nothing else changes in the connector. The API key check, the version reports and translation-file export/import never use the review service. Only target rows have a checkbox (`readReviewForm()` ignores the source and anything but `1`); existing settings files without `review` mean review off for every language, so there is nothing to migrate. Tests: `test/client.test.ts` (all four calls to the review URL, the key check direct, one review client, off without a URL or with the API URL, the default and `off`), `test/translate.test.ts` (a review language through the review service, another directly) and `test/settings.test.ts` (the checkbox per target language, saving, disabled with an empty `SUPERTEXT_REVIEW_URL`).
 
 ### Supertext Plugin Health
 
@@ -131,7 +135,7 @@ Supertext accepts exactly the codes its `GET features` lists (the SDK's `Languag
 
 - **Who:** the status page needs a Ghost staff session (`users/me` with the browser's cookie, `?include=roles`); saving needs the role **Owner** or **Administrator** (403 otherwise; others see the boxes disabled).
 - **CSRF:** the form carries an HMAC of the staff session cookie (`CsrfTokens`, per-process secret, so a restart expires open forms), checked in constant time; an `Origin` other than the site's is refused. After saving, a 303 back to the page (`?saved=1`, or `memory` if the file couldn't be written).
-- **Storage:** `supertext-settings.json` next to `STATE_FILE`, or `SUPERTEXT_SETTINGS_FILE` (`{ "languageCodes": { "<code>": "<Supertext code>" } }`), written atomically via a temp file and re-read when it changes; in memory without a file. A broken file counts as empty, and nothing here throws into a request or a translation.
+- **Storage:** `supertext-settings.json` next to `STATE_FILE`, or `SUPERTEXT_SETTINGS_FILE` (`{ "languageCodes": { "<code>": "<Supertext code>" }, "review": ["<code>", …] }`), written atomically via a temp file and re-read when it changes; in memory without a file. A broken file counts as empty, and nothing here throws into a request or a translation.
 - **Upgrade:** nothing to migrate: the old configuration was `SUPERTEXT_LANGUAGE_MAP` only, which keeps working and wins.
 
 The stand-ins (`test/fakeSupertext.ts`, `test/docs/stand-in.mjs`) accept only listed codes and reject regional sources like the real API; `fakeSupertext.ts` also answers `FEATURE_ERROR` for a tone the target lacks.
@@ -171,10 +175,10 @@ GHOST_URL=… GHOST_ADMIN_API_KEY=… npm start
 
 - `test/collect.test.ts`: segments and round trips on the Lexical of a real Ghost 6 post (`test/fixtures/probe-lexical.json`), formatting kept when words are reordered, lost segments.
 - `test/webhook.test.ts`: signatures, payload parsing, tag → request mapping, Admin API JWT.
-- `test/translate.test.ts`: the translator and the webhook server against `fakeGhost.ts` (mirrors Ghost's tag slugs, `~` filter and update-collision check) and `fakeSupertext.ts`: create, update in place, kept when edited/published, forced overwrite, one translation per language, skip translations, errors, unmapped languages and unsupported tones (nothing sent), the public ping route (200/400/405, 404 with reports off), and the reports after a translation (`installed`; a rejected key as `invalid`) to a fake center.
-- `test/client.test.ts`: the SDK wrapper: protocol, status and HTTP error mapping, API key prefix, rate limiting, language-pair errors. `fakeSupertext.ts` reads the SDK's multipart body back as `FormData`.
+- `test/translate.test.ts`: the translator and the webhook server against `fakeGhost.ts` (mirrors Ghost's tag slugs, `~` filter and update-collision check) and `fakeSupertext.ts`: create, update in place, kept when edited/published, forced overwrite, one translation per language, skip translations, errors, unmapped languages and unsupported tones (nothing sent), a language with *Translation review* through the review service (all four calls) while another goes directly, the public ping route (200/400/405, 404 with reports off), and the reports after a translation (`installed`; a rejected key as `invalid`) to a fake center.
+- `test/client.test.ts`: the SDK wrapper: protocol, status and HTTP error mapping, API key prefix, rate limiting, language-pair errors, the User-Agent with the version, the review service client (`forReview`, default `REVIEW_URL`, off with an empty URL). `fakeSupertext.ts` reads the SDK's multipart body back as `FormData`.
 - `test/languages.test.ts`: exact codes, the SDK defaults (`de` → `de-DE`, `zh-CN` → `zh-Hans`, `es-ES` → `es`) and what has none (`de-LI`, `gsw`, `sr-RS`), the mapping (targets and source), `SUPERTEXT_LANGUAGE_MAP` parsing, blocked/ignored tones.
-- `test/settings.test.ts`: the settings file (next to `STATE_FILE`, broken content, memory), the combo boxes' preselection (saved → suggestion → *— choose —*), the override, form validation, CSRF tokens, and the HTTP flow against a fake `users/me`: saving as Administrator, refusals without session, as Editor, without or with a forged token, cross-site and with an unknown code.
+- `test/settings.test.ts`: the settings file (next to `STATE_FILE`, broken content, memory), the combo boxes' preselection (saved → suggestion → *— choose —*), the override, form validation, CSRF tokens, the *Translation review* checkboxes (targets only, off by default, disabled with an empty `SUPERTEXT_REVIEW_URL`), and the HTTP flow against a fake `users/me`: saving as Administrator, refusals without session, as Editor, without or with a forged token, cross-site and with an unknown code.
 - `test/reporting.test.ts`: ping address per setup, ping answers, state in `STATE_FILE` (also broken or unwritable), one `installed` report with the key check, Ghost version and ping address and never the key, `upgraded` only for a real version change, a 401 reported once, a missing key checked without a request, nothing sent with reports off, no exception when the center or Ghost fail, the status page's key check, setting, unmapped languages and tone warnings. Supertext is `fakeSupertext.ts`, the center a fake `fetch`; nothing reaches the live API or the center.
 - `test/files.test.ts`: translation files: reference round trip; export with the collected segments and paths, plain text as text, mapped and unmapped codes, HTML with one language; import through the Translator into a draft (`ok` written, `untranslated`/`invalid_markup`/`missing` keep the source, the source post never written), `source_changed` only with the option, edited translations kept unless forced, an unchanged HTML file writes the source, other plugin, unknown reference, unconfigured language, missing post, too large and invalid files; the HTTP flow (download headers, multipart import, summary, CSRF/cross-site/signed-out refusals, Authors refused).
 - `test/i18n.test.ts`: every catalog has the English keys with the same placeholders, tags and links; French non-breaking spaces; language choice; localized status page, errors and tag descriptions.
@@ -213,6 +217,7 @@ Variables (see `demo/.env.example`):
 | `DEMO_SITE_TITLE`, `DEMO_ADMIN_NAME`, `DEMO_EDITOR_NAME` | Optional names |
 | `TARGET_LANGUAGES`, `SOURCE_LANGUAGE`, `SUPERTEXT_POLITENESS`, `SUPERTEXT_LANGUAGE_MAP` | Override the baked-in languages |
 | `SUPERTEXT_VERSION_REPORTS` | `0` turns the version reports off (default on) |
+| `SUPERTEXT_REVIEW_URL` | optional: another review service than Supertext's (empty or `off`: Translation review off everywhere); to try the review service, tick *Translation review* on the status page instead of changing `SUPERTEXT_API_URL` |
 | `url` | Public URL if not on Railway |
 
 Secrets live only in Railway variables, never in the repository.
@@ -279,7 +284,9 @@ Results don't store translated text: `TranslateResult.localized` / `Job.localize
 
 ## Known limitations / roadmap
 
-- No status page in setup B (standalone); results only in the log, and no translation files page.
+- No status page in setup B (standalone); results only in the log, no translation files page and no *Translation review*.
+- `docs/images/status-mapping.png` doesn't show the *Translation review* column yet (no demo container could run in the session that added it): regenerate it with `ONLY=status npm run docs:screenshots` and add the checkbox to its alt text in `docs/INSTALLATION.md`.
+- Translation review: reviewers' corrections reach Ghost only with the next translation (no push); a translation that was edited or published needs `#retranslate-…`. The translation memory and the corrections live in the review service.
 - Translation files: one post or page per export (no bulk export yet). The docs have no screenshots of the translation files page yet (they come from the demo container; add them on the next screenshot run).
 - No *Test connection* button: the key is checked at startup, when it changes and after a rejected translation.
 - Without `STATE_FILE` the reporter's state is in memory, so every restart reports `installed` again and re-checks the key.

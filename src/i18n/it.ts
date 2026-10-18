@@ -73,6 +73,10 @@ export const it: Messages = {
   'page.mappingCrossSite': 'Richiesta rifiutata: il modulo non è stato inviato dalla pagina di stato.',
   'page.mappingInvalid': 'Questo non è un codice di lingua Supertext. Ne scelga uno dall’elenco.',
   'page.mappingTooLarge': 'La richiesta è troppo grande.',
+  'page.reviewLabel': 'Revisione delle traduzioni',
+  'page.reviewHelp': 'Le traduzioni in questa lingua passano dal servizio di revisione di Supertext, così i revisori possono controllarle e correggerle direttamente sul sito con l’estensione Supertext Localization Review. Le loro correzioni vengono riprese alla prossima traduzione dell’articolo o della pagina.',
+  'page.reviewOff': 'Disattivata per tutte le lingue: SUPERTEXT_REVIEW_URL è vuoto.',
+  'page.reviewService': 'Servizio di revisione',
 
   'status.created': 'Creato',
   'status.failed': 'Non riuscito',

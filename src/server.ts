@@ -7,7 +7,7 @@ import { JobLog } from './jobs.js'
 import { format, isUiLocale, type MessageKey, pickLocale, t, type UiLocale } from './i18n/index.js'
 import { type Language, managedTags, remapLanguages, requestsFromTags, sourceCodeOrNull } from './languages.js'
 import { PING_PATH, Reporting } from './reporting.js'
-import { CsrfTokens, effectiveMapping, mappingRows, readMappingForm, SettingsStore } from './settings.js'
+import { CsrfTokens, effectiveMapping, mappingRows, readMappingForm, readReviewForm, reviewOn, SettingsStore } from './settings.js'
 import { renderStatusPage } from './status-page.js'
 import { collect } from './collect.js'
 import { buildExport, type Format, FilesError, importFile, type ImportJob, MAX_UPLOAD_BYTES } from './files.js'
@@ -17,7 +17,7 @@ import { readMarker } from './translate.js'
 import { TranslationFileError } from './vendor/supertext-sdk/index.js'
 import { fontFaces, STATIC_PATH, staticFile, staticUrl } from './static.js'
 import { VERSION } from './version.js'
-import { SupertextClient } from './supertext/client.js'
+import { REVIEW_URL, SupertextClient } from './supertext/client.js'
 import { Translator } from './translate.js'
 
 const log = (msg: string) => console.log(`[supertext] ${msg}`)
@@ -63,6 +63,9 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
   // Ghost is reached directly in proxy mode (no round trip through the public URL).
   const apiUrl = config.upstream ?? config.siteUrl
 
+  /** Supertext's review service (or `SUPERTEXT_REVIEW_URL`); '' = review off for every language. */
+  const reviewServiceUrl = config.supertextReviewUrl ?? REVIEW_URL
+
   const ghost = (): GhostAdmin | null => {
     const { adminKey } = config.ghostSecrets()
     if (!adminKey) return null
@@ -74,6 +77,8 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
         baseUrl: config.supertextApiUrl,
         fetch: deps.fetch,
         pollIntervalMs: deps.supertextPollMs,
+        // Target languages with *Translation review* on go through this client's forReview(true).
+        reviewUrl: reviewServiceUrl,
       })
     : null
 
@@ -91,8 +96,14 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
   const csrf = new CsrfTokens()
   /** The mapping used now: `SUPERTEXT_LANGUAGE_MAP` wins, then the status page's combo boxes. */
   const languageMap = () => effectiveMapping(settings.load().languageCodes, config.languageMap)
-  const languages = () => remapLanguages(config.languages, languageMap())
-  const rows = () => mappingRows(config.sourceLanguage, config.languages.map((l) => l.code), settings.load().languageCodes, config.languageMap)
+  const languages = () => {
+    const saved = settings.load()
+    return remapLanguages(config.languages, languageMap()).map((l) => ({ ...l, review: reviewServiceUrl !== '' && reviewOn(l.code, saved) }))
+  }
+  const rows = () => {
+    const saved = settings.load()
+    return mappingRows(config.sourceLanguage, config.languages.map((l) => l.code), saved.languageCodes, config.languageMap, saved.review)
+  }
 
   const reporting = new Reporting(config, { fetch: deps.fetch, ghostVersion, log, reporterOverrides: deps.reporterOverrides })
   /** Reporter runs in the background; tracked so `idle()` (tests, shutdown) can wait for them. */
@@ -212,10 +223,15 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
       return refuse(413, 'page.mappingTooLarge')
     }
     if (!csrf.verify(user.session, form.get('csrf'))) return refuse(403, 'page.mappingExpired')
-    const codes = readMappingForm(form, rows())
+    const current = rows()
+    const codes = readMappingForm(form, current)
     if (!codes) return refuse(400, 'page.mappingInvalid')
-    const stored = settings.save({ ...settings.load(), languageCodes: codes })
-    log(`Language mapping saved by ${user.email}: ${Object.entries(codes).map(([k, v]) => `${k}=${v}`).join(', ') || '(none)'}`)
+    const review = readReviewForm(form, current)
+    const stored = settings.save({ ...settings.load(), languageCodes: codes, review })
+    log(
+      `Language mapping saved by ${user.email}: ${Object.entries(codes).map(([k, v]) => `${k}=${v}`).join(', ') || '(none)'}; ` +
+        `Translation review: ${review.join(', ') || '(none)'}`,
+    )
     res.writeHead(303, { 'Cache-Control': 'no-store', Location: `${STATUS_PATH}?saved=${stored ? '1' : 'memory'}#mapping` })
     res.end()
   }
@@ -254,6 +270,7 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
         csrf: csrf.token(user.session),
         formAction: SETTINGS_PATH,
         persistent: Boolean(settings.file),
+        reviewAvailable: reviewServiceUrl !== '',
         rows: rows(),
         saved: url.searchParams.get('saved') === '1' ? 'saved' : url.searchParams.get('saved') === 'memory' ? 'memory' : null,
       },
@@ -262,7 +279,7 @@ export function createApp(config: Config, deps: AppDeps = {}): App {
       siteUrl: config.siteUrl,
       sourceLanguage: config.sourceLanguage,
       sourceTarget: sourceCodeOrNull(config.sourceLanguage, languageMap()),
-      supertext: { endpoint: config.supertextApiUrl, keyConfigured: Boolean(supertext) },
+      supertext: { endpoint: config.supertextApiUrl, keyConfigured: Boolean(supertext), reviewEndpoint: reviewServiceUrl },
       version: VERSION,
       viewer: `${user.name} (${user.email})`,
       filesUrl: FILES_PATH,

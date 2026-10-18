@@ -18,11 +18,11 @@ function setup(opts: { normalizeLexical?: boolean; supertext?: Parameters<typeof
   const ghost = fakeGhost(opts)
   const st = fakeSupertext(opts.supertext)
   const fetchImpl = ((input: RequestInfo | URL, init?: RequestInit) =>
-    String(input).startsWith('https://api.test/') ? st.fetch(input, init) : ghost.fetch(input, init)) as typeof fetch
+    /^https:\/\/(api|review)\.test\//.test(String(input)) ? st.fetch(input, init) : ghost.fetch(input, init)) as typeof fetch
   const translator = new Translator({
     ghost: new GhostAdmin({ adminKey: ADMIN_KEY, apiUrl: 'https://ghost.test', fetch: fetchImpl }),
     sourceLanguage: 'en',
-    supertext: new SupertextClient({ apiKey: 'test-key', baseUrl: 'https://api.test/v1', fetch: fetchImpl, sleep: async () => {} }),
+    supertext: new SupertextClient({ apiKey: 'test-key', baseUrl: 'https://api.test/v1', fetch: fetchImpl, reviewUrl: 'https://review.test/v1/', sleep: async () => {} }),
   })
   const source = ghost.add('posts', {
     authors: [{ email: 'eve@example.com', id: 'u2' }],
@@ -160,6 +160,16 @@ describe('Translator', () => {
     const [ignored] = parseTargetLanguages('en-US', { '*': 'more' })
     expect((await translator.translate('posts', source.id, ignored!, false)).status).toBe('created')
     expect(st.calls[0]!.form!.has('politeness')).toBe(false)
+  })
+
+  it('sends languages with Translation review through the review service, the others directly', async () => {
+    const { source, st, translator } = setup()
+    expect((await translator.translate('posts', source.id, { ...de, review: true }, false)).status).toBe('created')
+    expect((await translator.translate('posts', source.id, fr, false)).status).toBe('created')
+    const byHost = (host: string) => st.calls.filter((c) => new URL(c.url).host === host).map((c) => `${c.method} ${new URL(c.url).pathname.replace(/\/f\d+/, '/{id}')}`)
+    const roundTrip = ['POST /v1/translate/ai/file', 'GET /v1/translate/ai/file/{id}/status', 'GET /v1/translate/ai/file/{id}/translation', 'DELETE /v1/translate/ai/file/{id}']
+    expect(byHost('review.test'), 'German: upload, status, download and delete through the review service').toEqual(roundTrip)
+    expect(byHost('api.test'), 'French: directly to Supertext').toEqual(roundTrip)
   })
 
   it('reports segments that came back empty', async () => {

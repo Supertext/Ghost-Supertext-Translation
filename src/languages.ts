@@ -37,6 +37,11 @@ export type Language = {
   translateTag: string
   /** `#retranslate-de-ch`: request a translation and overwrite an edited or published one. */
   retranslateTag: string
+  /**
+   * *Translation review* (status page → Language mapping): translations into this language go
+   * through Supertext's review service (`SUPERTEXT_REVIEW_URL`). Absent or false: directly to Supertext.
+   */
+  review?: boolean
 }
 
 export const TRANSLATE_ALL_TAG = '#translate-all'

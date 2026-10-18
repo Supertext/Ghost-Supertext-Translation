@@ -96,6 +96,7 @@ If you change the original and want the translation to follow, remove the `#tran
   ![The status page showing "Not overwritten" because the German translation was edited](images/status-kept.png)
 
   To replace it anyway, add `#retranslate-de-ch` (or `#retranslate-all`) to the original. This overwrites the translation's text with a fresh translation. A published translation stays published, so check it right after.
+- **Translation review:** if your administrator turned on *Translation review* for a language, reviewers (your colleagues or Supertext linguists) check and correct the translations on the website. Their corrections come into Ghost the next time you translate the post into that language: after a review, translate it again (`#retranslate-…` if the translation was edited or published). Texts reviewed once keep their corrected wording in later translations.
 
 ## What is not translated
 

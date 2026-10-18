@@ -27,7 +27,7 @@ import {
 } from './vendor/supertext-plugin-health/index.js'
 import { SDK_VERSION } from './vendor/supertext-sdk/index.js'
 import { apiKeyFingerprint, type FetchLike, SupertextClient } from './vendor/supertext-sdk/v1/index.js'
-import { VERSION } from './version.js'
+import { USER_AGENT, VERSION } from './version.js'
 
 /** The GitHub repository name: the center reads the latest release from it. */
 export const PLUGIN_NAME = 'Ghost-Supertext-Translation'
@@ -127,7 +127,7 @@ export class Reporting {
   reporter(ghostVersion: string | null): InstallationReporter {
     const clientOptions = {
       baseUrl: this.config.supertextApiUrl,
-      userAgent: 'ghost-supertext-translation',
+      userAgent: USER_AGENT,
       ...(this.deps.fetch ? { fetch: this.deps.fetch as FetchLike } : {}),
       ...(this.deps.reporterOverrides?.now ? { now: this.deps.reporterOverrides.now } : {}),
     }

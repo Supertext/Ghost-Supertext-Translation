@@ -30,6 +30,9 @@ function readVersion(): string {
 
 export const VERSION = readVersion()
 
+/** User-Agent of every request to Supertext (after the SDK's own): the repository name and this version. */
+export const USER_AGENT = `Ghost-Supertext-Translation/${VERSION}`
+
 /** GitHub release page for a release version (X.Y.Z), else undefined. */
 export function releaseUrl(version: string): string | undefined {
   return /^\d+\.\d+\.\d+$/.test(version) ? `${RELEASES_URL}v${version}` : undefined

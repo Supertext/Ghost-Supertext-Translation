@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import { SupertextClient, SupertextError } from '../src/supertext/client.js'
+import { reviewUrl } from '../src/config.js'
+import { REVIEW_URL, SupertextClient, SupertextError } from '../src/supertext/client.js'
+import { VERSION } from '../src/version.js'
 import { fakeSupertext } from './fakeSupertext.js'
 
 const noSleep = async () => {}
@@ -131,5 +133,57 @@ describe('rate limiting', () => {
     const { retryDelayMs } = await import('../src/vendor/supertext-sdk/v1/index.js')
     expect(retryDelayMs(0, '3')).toBe(3000)
     expect(retryDelayMs(1, null)).toBeGreaterThanOrEqual(2000)
+  })
+
+  it('names the connector and its version in the User-Agent', async () => {
+    let agent = ''
+    const fake = fakeSupertext()
+    const spy = ((input: RequestInfo | URL, init?: RequestInit) => {
+      agent = new Headers(init?.headers).get('user-agent') ?? ''
+      return fake.fetch(input, init)
+    }) as typeof fetch
+    await client(fake, { fetch: spy }).validateApiKey()
+    expect(agent).toContain(`Ghost-Supertext-Translation/${VERSION}`)
+  })
+})
+
+describe('Translation review', () => {
+  it('sends every call of a review language to the review service, with the same key', async () => {
+    const fake = fakeSupertext()
+    const direct = client(fake, { reviewUrl: 'https://review.test/v1/' })
+    expect(direct.forReview(false)).toBe(direct)
+    const review = direct.forReview(true)
+    expect(review).not.toBe(direct)
+    expect(direct.forReview(true), 'one review client').toBe(review)
+
+    expect(await review.translateHtml({ html: '<p data-st-id="0">Hallo</p>', targetLang: 'de-CH' })).toContain('[de-CH] Hallo')
+    expect(fake.calls.map((c) => `${c.method} ${c.url}`)).toEqual([
+      'POST https://review.test/v1/translate/ai/file',
+      'GET https://review.test/v1/translate/ai/file/f1/status',
+      'GET https://review.test/v1/translate/ai/file/f1/translation',
+      'DELETE https://review.test/v1/translate/ai/file/f1',
+    ])
+    // The key check goes directly to Supertext.
+    await direct.validateApiKey()
+    expect(fake.calls.at(-1)?.url).toBe('https://api.test/v1/features')
+  })
+
+  it('is off without a review URL or with the API URL itself', () => {
+    const fake = fakeSupertext()
+    const off = client(fake)
+    expect(off.forReview(true)).toBe(off)
+    const empty = client(fake, { reviewUrl: '' })
+    expect(empty.forReview(true)).toBe(empty)
+    const same = client(fake, { reviewUrl: 'https://api.test/v1/' })
+    expect(same.forReview(true)).toBe(same)
+  })
+
+  it('defaults SUPERTEXT_REVIEW_URL to Supertext’s review service; empty or off turns it off', () => {
+    expect(REVIEW_URL).toBe('https://localizationreview-production.up.railway.app/v1/')
+    expect(reviewUrl(undefined)).toBe(REVIEW_URL)
+    expect(reviewUrl('')).toBe('')
+    expect(reviewUrl(' off ')).toBe('')
+    expect(reviewUrl('0')).toBe('')
+    expect(reviewUrl('http://localhost:3000/v1/')).toBe('http://localhost:3000/v1/')
   })
 })

@@ -189,9 +189,10 @@ export class Translator {
     } else {
       const html = buildHtml(collected.segments)
       this.opts.log?.(
-        `Translating ${kind} ${source.id} "${source.title}" into ${language.code}: ${collected.segments.length} segments, ${html.length} characters`,
+        `Translating ${kind} ${source.id} "${source.title}" into ${language.code}: ${collected.segments.length} segments, ${html.length} characters${language.review ? ' (Translation review)' : ''}`,
       )
-      const translatedHtml = await this.opts.supertext!.translateHtml({ html, ...codes! })
+      // *Translation review* on: Supertext's review service (same key and protocol), else directly to Supertext.
+      const translatedHtml = await this.opts.supertext!.forReview(language.review === true).translateHtml({ html, ...codes! })
       missing = applyTranslations(collected.segments, parseHtml(translatedHtml))
     }
 

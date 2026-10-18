@@ -29,6 +29,8 @@ app.server.listen(config.port, config.host, () => {
       `[supertext] No Supertext language for ${unmapped.join(', ')}: choose one on the status page (${config.upstream ? `${config.siteUrl}/ghost/supertext/` : '/ghost/supertext/'} → Language mapping) or set SUPERTEXT_LANGUAGE_MAP (e.g. de-LI=de-CH). Nothing is sent for it.`,
     )
   }
+  const reviewed = languages.filter((l) => l.review).map((l) => l.code)
+  if (reviewed.length) console.log(`[supertext] Translation review for ${reviewed.join(', ')}: through ${config.supertextReviewUrl}`)
   if (app.settings.file === null) console.log('[supertext] No STATE_FILE or SUPERTEXT_SETTINGS_FILE: the language mapping chosen on the status page is kept in memory only.')
   for (const l of languages) {
     if (l.politenessUnsupported === 'blocked') console.log(`[supertext] Supertext offers no formal/informal tone for ${l.target}: remove ${l.code} from SUPERTEXT_POLITENESS (its translations fail until then).`)

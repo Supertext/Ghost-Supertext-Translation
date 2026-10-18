@@ -73,6 +73,10 @@ export const de: Messages = {
   'page.mappingCrossSite': 'Anfrage abgelehnt: Das Formular wurde nicht von der Statusseite gesendet.',
   'page.mappingInvalid': 'Das ist kein Supertext-Sprachcode. Wählen Sie einen aus der Liste.',
   'page.mappingTooLarge': 'Die Anfrage ist zu groß.',
+  'page.reviewLabel': 'Übersetzungsprüfung',
+  'page.reviewHelp': 'Übersetzungen in diese Sprache laufen über den Prüfdienst von Supertext, damit Prüferinnen und Prüfer sie mit der Erweiterung Supertext Localization Review direkt auf der Website kontrollieren und korrigieren können. Ihre Korrekturen werden beim nächsten Übersetzen des Beitrags oder der Seite übernommen.',
+  'page.reviewOff': 'Für alle Sprachen ausgeschaltet: SUPERTEXT_REVIEW_URL ist leer.',
+  'page.reviewService': 'Prüfdienst',
 
   'status.created': 'Erstellt',
   'status.failed': 'Fehlgeschlagen',

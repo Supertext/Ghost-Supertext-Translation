@@ -3,7 +3,7 @@ import { readFileSync, statSync } from 'node:fs'
 import { settingsPath } from './settings.js'
 import { type Language, parseLanguageMap, parsePoliteness, parseTargetLanguages } from './languages.js'
 import { reportsEnabled } from './vendor/supertext-plugin-health/index.js'
-import { SUPERTEXT_ENVIRONMENTS } from './supertext/client.js'
+import { REVIEW_URL, SUPERTEXT_ENVIRONMENTS } from './supertext/client.js'
 
 /**
  * All settings come from environment variables (see docs/INSTALLATION.md → All settings).
@@ -20,6 +20,11 @@ export type Config = {
   upstream: string | null
   supertextApiKey: string
   supertextApiUrl: string
+  /**
+   * `SUPERTEXT_REVIEW_URL`: the review service for target languages with *Translation review* on
+   * (default: Supertext's, `REVIEW_URL`); '' = review off for every language. Optional for tests.
+   */
+  supertextReviewUrl?: string
   sourceLanguage: string
   languages: Language[]
   /**
@@ -44,6 +49,13 @@ export type Config = {
 }
 
 const env = (name: string, fallback = '') => (process.env[name] ?? '').trim() || fallback
+
+/** `SUPERTEXT_REVIEW_URL`: unset = Supertext's review service; empty, `off`, `0`, `false` or `no` = off. */
+export function reviewUrl(value: string | undefined): string {
+  if (value === undefined) return REVIEW_URL
+  const v = value.trim()
+  return /^(off|0|false|no|none)?$/i.test(v) ? '' : v
+}
 
 export function loadConfig(): Config {
   const upstream = env('GHOST_UPSTREAM') || null
@@ -87,6 +99,7 @@ export function loadConfig(): Config {
     stateFile: env('STATE_FILE') || null,
     supertextApiKey: env('SUPERTEXT_API_KEY'),
     supertextApiUrl: env('SUPERTEXT_API_URL', SUPERTEXT_ENVIRONMENTS.live),
+    supertextReviewUrl: reviewUrl(process.env.SUPERTEXT_REVIEW_URL),
     uiLanguage: env('UI_LANGUAGE', 'auto').toLowerCase(),
     upstream,
     versionReports: reportsEnabled(null, env('SUPERTEXT_VERSION_REPORTS') || null),
