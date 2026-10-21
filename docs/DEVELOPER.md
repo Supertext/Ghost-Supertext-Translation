@@ -187,7 +187,7 @@ The real Ghost round trip is covered by the demo container (below) and the scree
 
 ## CI / deploy
 
-GitHub Actions (`.github/workflows/ci.yml`): typecheck, tests and build on Node 20 and 22. Railway builds `demo/Dockerfile` from `main` on every push.
+GitHub Actions (`.github/workflows/ci.yml`): typecheck, tests and build on Node 20, 22, 24 and 26. Railway builds `demo/Dockerfile` from `main` on every push.
 
 ## Demo
 

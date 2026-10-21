@@ -5,7 +5,7 @@ For administrators. The Supertext connector is a small Node.js service next to y
 ## Requirements
 
 - Ghost **6** (self-hosted or Ghost(Pro)). Posts must use Ghost's current (Lexical) editor, which is the default since Ghost 5.
-- Node.js **20.9** or newer for the connector (or Docker).
+- Node.js **20.9** or newer for the connector (tested with 20, 22, 24 and 26), or Docker.
 - A Supertext account with an API key ([create an account](https://www.supertext.com/person/en/account/signin); [generate the key](https://www.supertext.com/en/integrations/api) with the Admin role; see [API key](#api-key)).
 - The connector must reach `https://api.supertext.com` over HTTPS (and, for [Translation review](#translation-review), Supertext's review service).
 - The connector must be reachable by Ghost over the internet, or on your Ghost site's own host name (see [Choose a setup](#choose-a-setup)).
